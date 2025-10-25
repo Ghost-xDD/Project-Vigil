@@ -1,0 +1,95 @@
+# Configuration for the Sentry ML Layer
+
+# --- Data Paths ---
+data_dir: "data"
+raw_data_file: "data/raw/synthetic_metrics.csv"
+processed_data_file: "data/processed/engineered_metrics.csv"
+
+# --- Model Storage ---
+# Base directory for all models
+models_dir: "models"
+# Directory for other artifacts (feature lists, thresholds)
+artifacts_dir: "artifacts"
+
+# Base filenames (script will add extensions like .joblib or .keras)
+anomaly_model_base_name: "anomaly_detector"
+failure_model_base_name: "failure_classifier"
+# Template for latency models
+latency_model_template: "latency_model_{node_id}" # .joblib will be added
+
+# --- New features to improve latency model ---
+interaction_pairs:
+  - ['cpu_usage', 'error_rate']
+  - ['memory_usage', 'block_height_gap']
+  - ['disk_io', 'cpu_usage']
+
+# --- Logging ---
+log_file: "logs/sentry_ml.log"
+log_level: "INFO" # e.g., DEBUG, INFO, WARNING, ERROR
+
+# --- Feature Engineering ---
+feature_engineering:
+  metrics_to_engineer:
+    - 'cpu_usage'
+    - 'memory_usage'
+    - 'error_rate'
+    - 'latency_ms'
+    - 'disk_io'
+    - 'block_height_gap'
+  rolling_windows:
+    - 5  # 5-minute rolling stats
+    - 10 # 10-minute rolling stats
+  lag_periods:
+    - 1  # 1-minute lag
+    - 2  # 2-minute lag
+
+  # Thresholds for creating binary "danger" flags
+  thresholds:
+    cpu_usage: 80.0
+    memory_usage: 85.0
+    error_rate: 10.0
+    block_height_gap: 5
+    disk_io: 50.0
+
+# --- Model Training ---
+# Common parameters
+metadata_columns: ['timestamp', 'node_id', 'client_type']
+target_columns: ['failure_label'] # 'latency_ms' is handled separately
+
+anomaly_model:
+  # Model: sklearn.neural_network.MLPRegressor (as Autoencoder)
+  test_split_ratio: 0.2
+  healthy_state_label: 0 # The value in 'failure_label' that indicates a healthy state
+  hidden_layer_sizes: [64, 32, 64] # Encoder -> Bottleneck -> Decoder
+  activation: 'relu'
+  solver: 'adam'
+  max_iter: 500
+  learning_rate_init: 0.001
+  alpha: 0.0001 # L2 regularization
+  early_stopping: true
+  n_iter_no_change: 10
+  batch_size: 32
+
+failure_model:
+  # Model: sklearn.linear_model.LogisticRegression
+  test_split_ratio: 0.2
+  target_column: 'failure_label'
+  # LogisticRegression params
+  C: 1.0
+  solver: 'liblinear'
+  class_weight: 'balanced'
+
+latency_model:
+  # Model: pmdarima.auto_arima (SARIMAX)
+  target_column: 'latency_ms'
+  test_size: 200     # Absolute number of samples for test set (per node)
+  min_obs: 100       # Min samples to train
+  seasonal_m: 60   # Seasonal period (60 min = 1 hour)
+
+# --- API & Routing ---
+# Number of recent data points to use for live feature engineering
+prediction_history_size: 15 
+
+optimization:
+  weight_failure: 0.7 # 70% importance on failure probability
+  weight_latency: 0.3 # 30% importance on latency
