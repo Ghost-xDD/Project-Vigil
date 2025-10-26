@@ -14,6 +14,46 @@ Vigil is the **predictive "nervous system"** for this new, complex environment.
 
 Instead of reacting to failures, our Vigil Intelligence API predicts them. It analyzes real-time, client-specific performance data to forecast instability before the first transaction is ever dropped, enabling a new generation of proactive, truly resilient infrastructure.
 
+## ❗️ The Problem: Driving Blind
+Today's RPC infrastructure is blind to the new multi-client reality. It relies on a "reactive failover" model, which is fundamentally broken.
+
+- **The "Old Way" (Reactive)**:
+
+    - A node (e.g., an Agave instance) begins to degrade due to memory pressure or scheduling stalls.
+
+    - Transactions sent to this node start to slow down and then fail.
+
+    - Only after errors are detected does a "dumb" load balancer finally reroute traffic.
+
+### Why This Fails:
+
+- For Users: This means failed swaps, dropped liquidations, and a terrible user experience.
+
+- For Institutions: This is unacceptable. Reactive failover is downtime. It's a 2020 solution for a 2025 network. You cannot build a high-availability system on an infrastructure that only responds after the failure
+
+## 💡 The Solution: A Predictive Intelligence Layer
+Vigil moves the entire ecosystem from REACTIVE -> PREDICTIVE.
+
+Our solution is two-fold: a powerful core API and a proof-of-concept application to demonstrate its power.
+
+### 1. The Vigil Intelligence API (The "Brain")
+At its core, Vigil is a machine learning engine that functions as an "early warning system."
+
+- Analyze: We ingest a rich stream of real-time telemetry from both Agave and Firedancer nodes, learning their unique, client-specific "leading indicators" of instability.
+
+- Predict: Our model uses this data to generate a single, powerful output for any given RPC node: a real-time "Failure Probability Score."
+
+- Empower: This API is our core B2B product. It is designed to be the "Intel Inside" for reliability, allowing existing RPC providers (Helius, Triton, QuickNode) to upgrade their entire infrastructure from reactive to predictive.
+
+### 2. The Vigil Load Balancer (The Hackathon POC)
+To prove the power of our API, we built a next-generation RPC gateway that integrates our **"Failure Probability Score"** at its core.
+
+Instead of waiting for timeouts, Vigil's routing engine makes proactive, client-aware decisions:
+
+- 🛡️ Proactive Rerouting: As a node's "Failure Probability Score" climbs, our load balancer seamlessly and preemptively shifts traffic to healthy nodes. The result: zero user-facing errors.
+
+- 🚀 Client-Aware Optimization: The Vigil engine understands that for certain tasks, Firedancer's networking stack is superior, while for others, Agave's stability is preferable. It can intelligently route requests based on their type to the client best-suited for the job at that exact moment.
+
 ### Architecture
 
 ```
