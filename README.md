@@ -1,12 +1,16 @@
-# Project Vigil: A Predictive Intelligence Layer for Solana's Multi-Client Future
+# Project Vigil: 
 
-Intelligent monitoring and routing system for Solana RPC nodes with ML-powered failure prediction and optimization.
+Vigil is a predictive intelligence layer for Solana's multi-client network. Our core product is the Vigil Intelligence API, a service that predicts network and node instability before it happens.
 
 ## 🎯 Overview
 
-At its core, Vigil is a machine learning engine that functions as a predictive nervous system for Solana's infrastructure. It moves beyond simple uptime checks to analyze a rich stream of real-time performance data from both Agave and Firedancer nodes. 
+Solana's 2025 roadmap is centered on achieving institutional-grade resilience through client diversity. The parallel operation of the battle-tested Agave (Rust) client and the hyper-performant Firedancer (C++) client is the most critical evolution of the network.
 
-By learning the subtle, client-specific leading indicators of instability—such as memory pressure patterns, scheduling stalls, or RPC latency variance—our service can forecast node degradation and failure before it happens.
+However, this diversity introduces a profound new challenge: **asymmetry**. These clients have different architectures, different performance "fingerprints," and different failure modes.
+
+Vigil is the **predictive "nervous system"** for this new, complex environment.
+
+Instead of reacting to failures, our Vigil Intelligence API predicts them. It analyzes real-time, client-specific performance data to forecast instability before the first transaction is ever dropped, enabling a new generation of proactive, truly resilient infrastructure.
 
 ### Architecture
 
