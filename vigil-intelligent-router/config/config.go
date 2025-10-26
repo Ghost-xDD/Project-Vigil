@@ -23,6 +23,7 @@ type Config struct {
 	// Data Collector settings
 	DataCollectorURL string
 	MetricsEndpoint  string
+	HistoryLimit     int
 
 	// Fallback settings
 	FallbackRPCURL string
@@ -53,7 +54,8 @@ func Load() (*Config, error) {
 		MLServiceURL:       getEnv("ML_SERVICE_URL", "http://localhost:8001"),
 		MLPredictEndpoint:  getEnv("ML_PREDICT_ENDPOINT", "/predict"),
 		DataCollectorURL:   getEnv("DATA_COLLECTOR_URL", "http://localhost:8000"),
-		MetricsEndpoint:    getEnv("METRICS_ENDPOINT", "/api/v1/metrics/latest-metrics"),
+		MetricsEndpoint:    getEnv("METRICS_ENDPOINT", "/api/v1/metrics/history"),
+		HistoryLimit:       20,
 		FallbackRPCURL:     getEnv("FALLBACK_RPC_URL", "https://api.devnet.solana.com"),
 		FallbackEnabled:    getEnvBool("FALLBACK_ENABLED", true),
 		RequestTimeout:     getEnvDuration("REQUEST_TIMEOUT_SECONDS", 30),
@@ -130,9 +132,9 @@ func (c *Config) GetMLPredictURL() string {
 	return c.MLServiceURL + c.MLPredictEndpoint
 }
 
-// GetMetricsURL returns the full URL for fetching metrics
+// GetMetricsURL returns the full URL for fetching metrics with history limit
 func (c *Config) GetMetricsURL() string {
-	return c.DataCollectorURL + c.MetricsEndpoint
+	return fmt.Sprintf("%s%s?limit=%d", c.DataCollectorURL, c.MetricsEndpoint, c.HistoryLimit)
 }
 
 // GetListenAddr returns the address to listen on

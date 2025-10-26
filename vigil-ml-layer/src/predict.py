@@ -119,7 +119,8 @@ class SentryPredictor:
             
             # Use [0] to get the first (and only) forecast value
             forecast = model.predict(n_periods=1, exogenous=exog_row_2d)
-            return float(forecast)
+            # Fixed: Use iloc[0] instead of direct float() to avoid FutureWarning
+            return float(forecast[0]) if hasattr(forecast, '__len__') else float(forecast)
         except Exception as e:
             # FIX: Added exc_info=True to log the full error
             self.logger.error(f"Error during latency forecast for {node_id}: {e}", exc_info=True)
