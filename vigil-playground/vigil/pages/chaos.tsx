@@ -1,0 +1,673 @@
+import { useEffect, useMemo, useRef, useState } from 'react';
+import Link from 'next/link';
+import {
+  Activity,
+  Zap,
+  Brain,
+  Shuffle,
+  RefreshCcw,
+  AlertTriangle,
+  Play,
+  Square,
+} from 'lucide-react';
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  Legend,
+} from 'recharts';
+
+interface NodeMetric {
+  node_name: string;
+  latency_ms: number;
+  is_healthy: number;
+  cpu_usage?: number;
+  memory_usage?: number;
+  error_rate?: number;
+}
+
+interface NodePrediction {
+  node_id: string;
+  predicted_latency_ms: number;
+  failure_prob: number;
+  cost_score: number;
+  anomaly_detected: boolean;
+}
+
+interface RoutingRecommendation {
+  recommended_node: string;
+  explanation: string;
+  all_predictions: NodePrediction[];
+  recommendation_details: NodePrediction;
+}
+
+type RangeKey = '5m' | '15m' | '1h';
+
+interface ChaosLog {
+  time: string;
+  step: string;
+  node: string;
+  latency: number;
+}
+
+export default function Chaos() {
+  const [metrics, setMetrics] = useState<NodeMetric[]>([]);
+  const [prediction, setPrediction] = useState<RoutingRecommendation | null>(
+    null
+  );
+  const [loading, setLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
+  const [range, setRange] = useState<RangeKey>('15m');
+  const [mlSeries, setMlSeries] = useState<
+    Array<{ time: string; predicted: number; actual: number }>
+  >([]);
+  const [baselineSeries, setBaselineSeries] = useState<
+    Array<{ time: string; actual: number }>
+  >([]);
+  const [baselineMode, setBaselineMode] = useState<'round_robin' | 'random'>(
+    'round_robin'
+  );
+  const rrIndexRef = useRef<number>(0);
+  const [chaosActive, setChaosActive] = useState<boolean>(false);
+  const [iteration, setIteration] = useState<number>(0);
+  const [mlStepIdx, setMlStepIdx] = useState<number>(0);
+  const [baselineStepIdx, setBaselineStepIdx] = useState<number>(0);
+  const [mlLogs, setMlLogs] = useState<ChaosLog[]>([]);
+  const [baselineLogs, setBaselineLogs] = useState<ChaosLog[]>([]);
+  const [baselinePick, setBaselinePick] = useState<string>('');
+  const lastStepAtRef = useRef<number>(0);
+  const baselineFixedRef = useRef<string>('');
+
+  const mlSteps = useMemo(
+    () => [
+      'Collect metrics',
+      'Engineer features',
+      'Predict latency',
+      'Choose node',
+      'Forward request',
+      'Measure latency',
+      'Feedback update',
+    ],
+    []
+  );
+  const baselineSteps = useMemo(
+    () => [
+      'Pick node (RR/Random)',
+      'Forward request',
+      'Measure latency',
+      'No learning action',
+    ],
+    []
+  );
+
+  const dataCollectorUrl = useMemo(
+    () => process.env.NEXT_PUBLIC_DATA_COLLECTOR_URL || 'http://localhost:8000',
+    []
+  );
+  const mlServiceUrl = useMemo(
+    () => process.env.NEXT_PUBLIC_ML_SERVICE_URL || 'http://localhost:8001',
+    []
+  );
+
+  useEffect(() => {
+    const limit = range === '5m' ? 20 : range === '15m' ? 60 : 180;
+
+    let interval: NodeJS.Timeout | null = null;
+    const pollMs = chaosActive ? 1000 : 2000;
+    const stepIntervalMs = 2000;
+
+    const tick = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        // Latest metrics snapshot
+        const metricsRes = await fetch(
+          `${dataCollectorUrl}/api/v1/metrics/latest-metrics`
+        );
+        const latest: NodeMetric[] = await metricsRes.json();
+        setMetrics(latest);
+
+        // History for ML input
+        const historyRes = await fetch(
+          `${dataCollectorUrl}/api/v1/metrics/history?limit=${limit}`
+        );
+        const history = await historyRes.json();
+
+        // ML Prediction
+        const predictionRes = await fetch(`${mlServiceUrl}/predict`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ metrics: history }),
+        });
+        const pred: RoutingRecommendation = await predictionRes.json();
+        setPrediction(pred);
+
+        // Compute actual latencies for ML-picked and baseline-picked nodes
+        const now = new Date().toLocaleTimeString();
+        const mlNode = pred.recommended_node;
+        const mlActual =
+          latest.find((m) => m.node_name === mlNode)?.latency_ms ?? 0;
+        const mlPred = pred.recommendation_details.predicted_latency_ms;
+
+        // Baseline selection (fixed during chaos test)
+        let baselineNode = '';
+        if (latest.length > 0) {
+          if (chaosActive) {
+            if (!baselineFixedRef.current) {
+              if (baselineMode === 'round_robin') {
+                baselineFixedRef.current =
+                  latest[rrIndexRef.current % latest.length].node_name;
+              } else {
+                baselineFixedRef.current =
+                  latest[Math.floor(Math.random() * latest.length)].node_name;
+              }
+            }
+            baselineNode = baselineFixedRef.current;
+          } else {
+            if (baselineMode === 'round_robin') {
+              baselineNode =
+                latest[rrIndexRef.current % latest.length].node_name;
+              rrIndexRef.current = rrIndexRef.current + 1;
+            } else {
+              baselineNode =
+                latest[Math.floor(Math.random() * latest.length)].node_name;
+            }
+          }
+        }
+        const baselineActual =
+          latest.find((m) => m.node_name === baselineNode)?.latency_ms ?? 0;
+        setBaselinePick(baselineNode || '');
+
+        setMlSeries((prev) =>
+          [...prev, { time: now, predicted: mlPred, actual: mlActual }].slice(
+            -120
+          )
+        );
+        setBaselineSeries((prev) =>
+          [...prev, { time: now, actual: baselineActual }].slice(-120)
+        );
+
+        // Advance step indicators and logs when chaos is active (rate-limited)
+        const nowTs = Date.now();
+        if (chaosActive && nowTs - lastStepAtRef.current >= stepIntervalMs) {
+          lastStepAtRef.current = nowTs;
+          const mlStep = mlSteps[mlStepIdx];
+          const baseStep = baselineSteps[baselineStepIdx];
+          setIteration((i) => i + 1);
+          setMlStepIdx((idx) => (idx + 1) % mlSteps.length);
+          setBaselineStepIdx((idx) => (idx + 1) % baselineSteps.length);
+          setMlLogs((logs) =>
+            [
+              { time: now, step: mlStep, node: mlNode, latency: mlActual },
+              ...logs,
+            ].slice(0, 30)
+          );
+          setBaselineLogs((logs) =>
+            [
+              {
+                time: now,
+                step: baseStep,
+                node: baselineNode,
+                latency: baselineActual,
+              },
+              ...logs,
+            ].slice(0, 30)
+          );
+        }
+      } catch {
+        setError('Failed to fetch live data. Ensure services are running.');
+        // Do not throw; keep UI alive
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    // Prime then start polling
+    tick();
+    interval = setInterval(tick, pollMs);
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [
+    dataCollectorUrl,
+    mlServiceUrl,
+    baselineMode,
+    range,
+    chaosActive,
+    mlSteps,
+    baselineSteps,
+    mlStepIdx,
+    baselineStepIdx,
+  ]);
+
+  return (
+    <div className="min-h-screen bg-black text-white">
+      {/* Background */}
+      <div className="fixed inset-0 -z-10">
+        <div className="absolute inset-0 bg-[radial-gradient(60%_60%_at_50%_0%,rgba(88,28,135,0.12),rgba(17,17,23,0.0))]" />
+      </div>
+
+      {/* Header */}
+      <header className="fixed top-0 inset-x-0 z-50 bg-white/5 backdrop-blur-xl border-b border-white/10">
+        <div className="max-w-7xl mx-auto px-6 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <Activity className="w-6 h-6 text-violet-500" />
+              <h1 className="text-xl font-semibold">Chaos Test</h1>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="hidden md:flex items-center gap-1 px-2 py-1 rounded-lg bg-white/5 border border-white/10 text-xs">
+                <span className="text-white/60">Mode:</span>
+                <span className="text-white/80 font-medium">
+                  {baselineMode === 'round_robin' ? 'Round Robin' : 'Random'}
+                </span>
+              </div>
+              <button
+                onClick={() => setChaosActive(true)}
+                className={`text-xs px-2.5 py-1 rounded-md border inline-flex items-center gap-1.5 ${
+                  chaosActive
+                    ? 'bg-violet-600/60 border-violet-500 text-white/80'
+                    : 'bg-emerald-600 border-emerald-500'
+                }`}
+                title="Start Chaos Test"
+                disabled={chaosActive}
+              >
+                <Play className="w-3.5 h-3.5" /> Start
+              </button>
+              <button
+                onClick={() => setChaosActive(false)}
+                className="text-xs px-2.5 py-1 rounded-md border inline-flex items-center gap-1.5 bg-white/5 border-white/10 hover:bg-white/10"
+                title="Stop Chaos Test"
+              >
+                <Square className="w-3.5 h-3.5" /> Stop
+              </button>
+              <button
+                onClick={() => setBaselineMode('round_robin')}
+                className={`text-xs px-2.5 py-1 rounded-md border ${
+                  baselineMode === 'round_robin'
+                    ? 'bg-violet-600 border-violet-500'
+                    : 'bg-white/5 border-white/10'
+                }`}
+                title="Use Round Robin baseline"
+              >
+                <Shuffle className="w-3.5 h-3.5 inline mr-1" /> RR
+              </button>
+              <button
+                onClick={() => setBaselineMode('random')}
+                className={`text-xs px-2.5 py-1 rounded-md border ${
+                  baselineMode === 'random'
+                    ? 'bg-violet-600 border-violet-500'
+                    : 'bg-white/5 border-white/10'
+                }`}
+                title="Use Random baseline"
+              >
+                <Shuffle className="w-3.5 h-3.5 inline mr-1" /> Random
+              </button>
+              <div className="hidden md:block text-white/40 text-xs">|</div>
+              <button
+                onClick={() => setRange('5m')}
+                className={`text-xs px-2.5 py-1 rounded-md border ${
+                  range === '5m'
+                    ? 'bg-violet-600 border-violet-500'
+                    : 'bg-white/5 border-white/10'
+                }`}
+              >
+                5m
+              </button>
+              <button
+                onClick={() => setRange('15m')}
+                className={`text-xs px-2.5 py-1 rounded-md border ${
+                  range === '15m'
+                    ? 'bg-violet-600 border-violet-500'
+                    : 'bg-white/5 border-white/10'
+                }`}
+              >
+                15m
+              </button>
+              <button
+                onClick={() => setRange('1h')}
+                className={`text-xs px-2.5 py-1 rounded-md border ${
+                  range === '1h'
+                    ? 'bg-violet-600 border-violet-500'
+                    : 'bg-white/5 border-white/10'
+                }`}
+              >
+                1h
+              </button>
+              <div className="hidden md:block text-white/40 text-xs">|</div>
+              <nav className="hidden md:flex items-center gap-1 text-xs">
+                <Link
+                  href="/dashboard"
+                  className="px-2.5 py-1 rounded-md bg-white/5 border border-white/10 hover:bg-white/10"
+                >
+                  Dashboard
+                </Link>
+                <Link
+                  href="/chaos"
+                  className="px-2.5 py-1 rounded-md bg-violet-600/20 border border-violet-500/30 text-violet-200"
+                >
+                  Chaos
+                </Link>
+                <Link
+                  href="/comparison"
+                  className="px-2.5 py-1 rounded-md bg-white/5 border border-white/10 hover:bg-white/10"
+                >
+                  Comparison
+                </Link>
+                <Link
+                  href="/playground"
+                  className="px-2.5 py-1 rounded-md bg-white/5 border border-white/10 hover:bg-white/10"
+                >
+                  Playground
+                </Link>
+              </nav>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <main className="pt-24 pb-12 px-6 max-w-7xl mx-auto">
+        {error && (
+          <div className="mb-6 p-4 rounded-xl bg-red-500/10 border border-red-500/30 text-sm text-red-300 flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4" /> {error}
+          </div>
+        )}
+
+        {/* Headline KPI Row */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+          <div className="px-6 py-4 rounded-xl bg-white/5 border border-white/10">
+            <div className="text-sm text-white/60 mb-1">ML Pick</div>
+            <div className="text-2xl font-bold text-violet-300">
+              {prediction?.recommended_node || '—'}
+            </div>
+          </div>
+          <div className="px-6 py-4 rounded-xl bg-white/5 border border-white/10">
+            <div className="text-sm text-white/60 mb-1">Baseline Pick</div>
+            <div className="text-2xl font-bold text-white/80">
+              {baselinePick || '—'}
+            </div>
+          </div>
+          <div className="px-6 py-4 rounded-xl bg-white/5 border border-white/10 flex items-center justify-between">
+            <div className="text-sm text-white/60">Polling</div>
+            <RefreshCcw
+              className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`}
+            />
+          </div>
+        </div>
+
+        {/* Side-by-side Panels */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* ML Panel */}
+          <div className="p-6 rounded-2xl bg-gradient-to-br from-violet-950/40 to-black/60 border-2 border-violet-500/30 backdrop-blur-xl">
+            <div className="flex items-center gap-2 mb-4">
+              <Brain className="w-5 h-5 text-violet-400" />
+              <h2 className="text-lg font-semibold">ML Routing</h2>
+            </div>
+            {/* ML Stepper */}
+            <div className="mb-4 grid grid-cols-2 gap-4 text-xs">
+              <div className="p-3 rounded-lg bg-white/5 border border-white/10">
+                <div className="text-white/60 mb-1">Current Step</div>
+                <div className="font-semibold text-violet-300">
+                  {mlSteps[mlStepIdx]}
+                </div>
+              </div>
+              <div className="p-3 rounded-lg bg-white/5 border border-white/10">
+                <div className="text-white/60 mb-1">Iterations</div>
+                <div className="font-semibold text-white/80">{iteration}</div>
+              </div>
+            </div>
+            {prediction ? (
+              <div className="mb-4 grid grid-cols-2 gap-4 text-sm">
+                <div className="p-3 rounded-lg bg-white/5 border border-white/10">
+                  <div className="text-white/60">Predicted</div>
+                  <div className="text-xl font-semibold text-emerald-400">
+                    {prediction.recommendation_details.predicted_latency_ms.toFixed(
+                      1
+                    )}
+                    ms
+                  </div>
+                </div>
+                <div className="p-3 rounded-lg bg-white/5 border border-white/10">
+                  <div className="text-white/60">Risk</div>
+                  <div className="text-xl font-semibold text-amber-400">
+                    {(
+                      prediction.recommendation_details.failure_prob * 100
+                    ).toFixed(2)}
+                    %
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="h-24 rounded-lg bg-white/5 animate-pulse" />
+            )}
+
+            <div className="h-[240px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={mlSeries}>
+                  <XAxis
+                    dataKey="time"
+                    stroke="#ffffff40"
+                    tick={{ fill: '#ffffff60', fontSize: 11 }}
+                  />
+                  <YAxis
+                    stroke="#ffffff40"
+                    tick={{ fill: '#ffffff60', fontSize: 11 }}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: '#0a0a0a',
+                      border: '1px solid rgba(139, 92, 246, 0.3)',
+                      borderRadius: '8px',
+                    }}
+                    labelStyle={{ color: '#fff' }}
+                  />
+                  <Legend wrapperStyle={{ fontSize: '12px' }} />
+                  <Line
+                    type="monotone"
+                    dataKey="predicted"
+                    stroke="#8b5cf6"
+                    strokeWidth={2}
+                    dot={false}
+                    name="Predicted"
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="actual"
+                    stroke="#10b981"
+                    strokeWidth={2}
+                    dot={false}
+                    name="Actual"
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+            {/* ML Logs */}
+            <div className="mt-4 p-3 rounded-lg bg-white/5 border border-white/10 max-h-40 overflow-auto text-xs">
+              {mlLogs.length === 0 ? (
+                <div className="text-white/40">
+                  Logs will appear here during chaos.
+                </div>
+              ) : (
+                <ul className="space-y-1.5">
+                  {mlLogs.map((log, i) => {
+                    const colorDot =
+                      log.latency < 100
+                        ? 'bg-emerald-500'
+                        : log.latency < 200
+                        ? 'bg-amber-500'
+                        : 'bg-red-500';
+                    return (
+                      <li
+                        key={i}
+                        className="flex items-center justify-between gap-3 p-2 rounded-md bg-white/5 border border-white/10"
+                      >
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={`w-1.5 h-1.5 rounded-full ${colorDot}`}
+                          />
+                          <span className="text-white/60">{log.time}</span>
+                          <span className="px-2 py-0.5 rounded-full text-[11px] bg-violet-500/20 text-violet-200 border border-violet-500/30">
+                            {log.step}
+                          </span>
+                          <span className="px-2 py-0.5 rounded-full text-[11px] bg-white/10 text-white/80 border border-white/10">
+                            {log.node}
+                          </span>
+                        </div>
+                        <span className="font-mono text-white/80">
+                          {log.latency.toFixed(0)}ms
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+          </div>
+
+          {/* Baseline Panel */}
+          <div className="p-6 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-xl">
+            <div className="flex items-center gap-2 mb-4">
+              <Zap className="w-5 h-5 text-blue-400" />
+              <h2 className="text-lg font-semibold">Baseline Routing</h2>
+            </div>
+            {/* Baseline Stepper */}
+            <div className="mb-4 grid grid-cols-2 gap-4 text-xs">
+              <div className="p-3 rounded-lg bg-white/5 border border-white/10">
+                <div className="text-white/60 mb-1">Current Step</div>
+                <div className="font-semibold text-white/80">
+                  {baselineSteps[baselineStepIdx]}
+                </div>
+              </div>
+              <div className="p-3 rounded-lg bg-white/5 border border-white/10">
+                <div className="text-white/60 mb-1">Iterations</div>
+                <div className="font-semibold text-white/80">{iteration}</div>
+              </div>
+            </div>
+            <div className="mb-4 grid grid-cols-2 gap-4 text-sm">
+              <div className="p-3 rounded-lg bg-white/5 border border-white/10">
+                <div className="text-white/60">Strategy</div>
+                <div className="text-xl font-semibold text-white/80">
+                  {baselineMode === 'round_robin' ? 'Round Robin' : 'Random'}
+                </div>
+              </div>
+              <div className="p-3 rounded-lg bg-white/5 border border-white/10">
+                <div className="text-white/60">Live Nodes</div>
+                <div className="text-xl font-semibold text-white/80">
+                  {metrics.length}
+                </div>
+              </div>
+            </div>
+
+            <div className="h-[240px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={baselineSeries}>
+                  <XAxis
+                    dataKey="time"
+                    stroke="#ffffff40"
+                    tick={{ fill: '#ffffff60', fontSize: 11 }}
+                  />
+                  <YAxis
+                    stroke="#ffffff40"
+                    tick={{ fill: '#ffffff60', fontSize: 11 }}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: '#0a0a0a',
+                      border: '1px solid rgba(59, 130, 246, 0.3)',
+                      borderRadius: '8px',
+                    }}
+                    labelStyle={{ color: '#fff' }}
+                  />
+                  <Legend wrapperStyle={{ fontSize: '12px' }} />
+                  <Line
+                    type="monotone"
+                    dataKey="actual"
+                    stroke="#3b82f6"
+                    strokeWidth={2}
+                    dot={false}
+                    name="Actual"
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+            {/* Baseline Logs */}
+            <div className="mt-4 p-3 rounded-lg bg-white/5 border border-white/10 max-h-40 overflow-auto text-xs">
+              {baselineLogs.length === 0 ? (
+                <div className="text-white/40">
+                  Logs will appear here during chaos.
+                </div>
+              ) : (
+                <ul className="space-y-1.5">
+                  {baselineLogs.map((log, i) => {
+                    const colorDot =
+                      log.latency < 100
+                        ? 'bg-emerald-500'
+                        : log.latency < 200
+                        ? 'bg-amber-500'
+                        : 'bg-red-500';
+                    return (
+                      <li
+                        key={i}
+                        className="flex items-center justify-between gap-3 p-2 rounded-md bg-white/5 border border-white/10"
+                      >
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={`w-1.5 h-1.5 rounded-full ${colorDot}`}
+                          />
+                          <span className="text-white/60">{log.time}</span>
+                          <span className="px-2 py-0.5 rounded-full text-[11px] bg-white/10 text-white/80 border border-white/10">
+                            {log.step}
+                          </span>
+                          <span className="px-2 py-0.5 rounded-full text-[11px] bg-white/10 text-white/80 border border-white/10">
+                            {log.node}
+                          </span>
+                        </div>
+                        <span className="font-mono text-white/80">
+                          {log.latency.toFixed(0)}ms
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Node list snapshot */}
+        <div className="mt-6 p-6 rounded-2xl bg-white/5 border border-white/10">
+          <h3 className="text-lg font-semibold mb-3">Live Nodes</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            {metrics.map((m) => (
+              <div
+                key={m.node_name}
+                className={`p-3 rounded-xl border ${
+                  m.is_healthy === 1
+                    ? 'bg-emerald-500/10 border-emerald-500/20'
+                    : 'bg-red-500/10 border-red-500/20'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div
+                      className={`w-2 h-2 rounded-full ${
+                        m.is_healthy === 1 ? 'bg-emerald-500' : 'bg-red-500'
+                      } ${m.is_healthy === 1 ? 'animate-pulse' : ''}`}
+                    />
+                    <span className="font-semibold">{m.node_name}</span>
+                  </div>
+                  <span className="text-sm font-mono text-white/70">
+                    {m.latency_ms.toFixed(0)}ms
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </main>
+    </div>
+  );
+}

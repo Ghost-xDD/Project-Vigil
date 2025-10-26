@@ -1,0 +1,13 @@
+{
+  "buildCommand": "npm run build",
+  "outputDirectory": ".next",
+  "devCommand": "npm run dev",
+  "installCommand": "npm install",
+  "framework": "nextjs",
+  "env": {
+    "NEXT_PUBLIC_DATA_COLLECTOR_URL": "http://your-server-ip:8000",
+    "NEXT_PUBLIC_ML_SERVICE_URL": "http://your-server-ip:8001",
+    "NEXT_PUBLIC_ROUTER_URL": "http://your-server-ip:8080"
+  }
+}
+
