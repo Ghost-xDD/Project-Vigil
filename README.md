@@ -43,6 +43,16 @@ Machine learning service for predictive analytics:
 - **Latency Forecasting**: SARIMA (per-node models)
 - **Routing Optimization**: Weighted cost function (70% failure, 30% latency)
 
+### 3. Intelligent Router (`vigil-intelligent-router/`)
+
+Go-based high-performance reverse proxy:
+
+- **ML-Powered Routing**: Real-time node selection per request
+- **Concurrent Handling**: Goroutines for high throughput
+- **Response Streaming**: Zero-copy streaming for minimal latency
+- **Fallback Support**: Automatic failover to public RPC
+- **Production Ready**: Docker, health checks, structured logging
+
 ## 🚀 Quick Start
 
 ### Prerequisites

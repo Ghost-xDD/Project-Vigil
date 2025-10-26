@@ -1,3 +1,8 @@
+# Environment files with secrets
+.env
+*.env
+!.env.example
+
 # Python
 __pycache__/
 *.py[cod]
@@ -26,9 +31,6 @@ env/
 ENV/
 .venv
 
-# Environment variables
-.env
-
 # IDE
 .vscode/
 .idea/
@@ -54,3 +56,24 @@ Thumbs.db
 .coverage
 htmlcov/
 
+# Go
+*.exe
+*.exe~
+*.dll
+*.dylib
+vigil-router
+*.test
+*.out
+
+# ML Models and Data (if large)
+vigil-ml-layer/models/*.joblib
+vigil-ml-layer/models/*.keras
+vigil-ml-layer/data/raw/*.csv
+vigil-ml-layer/data/processed/*.csv
+vigil-ml-layer/artifacts/*.joblib
+
+# Keep directories but not contents
+!vigil-ml-layer/models/.gitkeep
+!vigil-ml-layer/artifacts/.gitkeep
+!vigil-ml-layer/data/raw/.gitkeep
+!vigil-ml-layer/data/processed/.gitkeep

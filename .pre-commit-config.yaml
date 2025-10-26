@@ -1,0 +1,35 @@
+# Pre-commit hooks to prevent committing secrets
+# Install: pip install pre-commit
+# Setup: pre-commit install
+
+repos:
+  # Check for secrets
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.4.0
+    hooks:
+      - id: detect-secrets
+        args: ['--baseline', '.secrets.baseline']
+        exclude: .*/go\.sum$
+
+  # Check for files that shouldn't be committed
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: check-added-large-files
+        args: ['--maxkb=1000']
+      - id: check-merge-conflict
+      - id: check-yaml
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+      - id: mixed-line-ending
+
+  # Prevent .env files from being committed
+  - repo: local
+    hooks:
+      - id: check-env-files
+        name: Check for .env files
+        entry: bash -c 'if git diff --cached --name-only | grep -E "\.env$"; then echo "ERROR: .env files should not be committed!"; exit 1; fi'
+        language: system
+        pass_filenames: false
+        always_run: true
+
