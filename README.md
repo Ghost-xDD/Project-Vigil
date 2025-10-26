@@ -1,10 +1,12 @@
-# Project Vigil
+# Project Vigil: A Predictive Intelligence Layer for Solana's Multi-Client Future
 
 Intelligent monitoring and routing system for Solana RPC nodes with ML-powered failure prediction and optimization.
 
 ## 🎯 Overview
 
-Project Vigil is a complete solution for monitoring Solana RPC node health and performance, using machine learning to predict failures and optimize routing decisions in real-time.
+At its core, Vigil is a machine learning engine that functions as a predictive nervous system for Solana's infrastructure. It moves beyond simple uptime checks to analyze a rich stream of real-time performance data from both Agave and Firedancer nodes. 
+
+By learning the subtle, client-specific leading indicators of instability—such as memory pressure patterns, scheduling stalls, or RPC latency variance—our service can forecast node degradation and failure before it happens.
 
 ### Architecture
 
