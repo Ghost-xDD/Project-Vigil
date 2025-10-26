@@ -2,7 +2,9 @@
 
 Vigil is a predictive intelligence layer for Solana's multi-client network. 
 
-Our core product is the Vigil Intelligence API, the predictive "nervous system" for Solana's multi-client network. It provides a real-time 'Failure Probability Score' for any node, allowing infrastructure to become predictive, not just reactive.
+Our core product is the Vigil Intelligence API, the predictive "nervous system" for Solana's multi-client network. 
+
+It provides a real-time 'Failure Probability Score' for any node, allowing infrastructure to become predictive, not just reactive.
 
 ## 🎯 Overview
 
