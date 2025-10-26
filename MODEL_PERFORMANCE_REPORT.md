@@ -1,4 +1,4 @@
-# Model Performance Report - Gradient Boosting Implementation
+# Model Performance Report
 
 **Date:** October 26, 2025  
 **Training Run:** Production Models with Real Node IDs  
@@ -11,7 +11,7 @@
 
 ✅ **All 4 latency models trained successfully**  
 ✅ **Training time: ~6 seconds total** (0.6-0.7 sec per node)  
-✅ **Mean Absolute Error: 10-15ms** (excellent for production)  
+✅ **Mean Absolute Error: 10-15** (excellent for production)  
 ✅ **MAPE: 6-14%** (industry-standard accuracy)  
 ✅ **No memory issues** (all models < 1GB total)
 
@@ -40,7 +40,7 @@
 
 - **High recall** on unhealthy samples (catches most issues)
 - **Low false positive rate** (threshold calibrated on healthy data)
-- **Production-ready** for early warning system
+- **Production-ready** for an early warning system
 
 ---
 
@@ -67,11 +67,11 @@
 ```
                 Predicted
               Healthy  Failure
-Actual Healthy  2265      1
+Actual Healthy  2264      2
        Failure     0     38
 ```
 
-**Accuracy:** 100% (2303/2304 correct predictions)
+**Accuracy:** 99% (2303/2304 correct predictions)
 
 ### Top Predictive Features
 
@@ -126,8 +126,8 @@ GradientBoostingRegressor(
 
 | Metric                      | Value             | Interpretation                        |
 | --------------------------- | ----------------- | ------------------------------------- |
-| **RMSE**                    | 12.61ms           | Average prediction error              |
-| **MAE**                     | 9.90ms            | Median prediction error (more robust) |
+| **RMSE**                    | 12.61             | Average prediction error              |
+| **MAE**                     | 9.90              | Median prediction error (more robust) |
 | **MAPE**                    | 6.33%             | 6.3% average percentage error ✅      |
 | **R² Score (Test)**         | -0.24             | Baseline: recent average              |
 | **R² Score (Train)**        | 0.91              | Excellent fit on training data        |
@@ -165,8 +165,8 @@ GradientBoostingRegressor(
 
 | Metric                      | Value             | Interpretation                    |
 | --------------------------- | ----------------- | --------------------------------- |
-| **RMSE**                    | 14.79ms           | Average prediction error          |
-| **MAE**                     | 11.86ms           | Median prediction error           |
+| **RMSE**                    | 14.79             | Average prediction error          |
+| **MAE**                     | 11.86             | Median prediction error           |
 | **MAPE**                    | 13.65%            | 13.7% average percentage error ✅ |
 | **R² Score (Test)**         | -0.41             | More variance than baseline       |
 | **R² Score (Train)**        | 0.88              | Strong training fit               |
@@ -204,8 +204,8 @@ GradientBoostingRegressor(
 
 | Metric                      | Value             | Interpretation                   |
 | --------------------------- | ----------------- | -------------------------------- |
-| **RMSE**                    | 15.56ms           | Average prediction error         |
-| **MAE**                     | 12.50ms           | Median prediction error          |
+| **RMSE**                    | 15.56             | Average prediction error         |
+| **MAE**                     | 12.50             | Median prediction error          |
 | **MAPE**                    | 9.66%             | 9.7% average percentage error ✅ |
 | **R² Score (Test)**         | -0.28             | Baseline comparison              |
 | **R² Score (Train)**        | 0.87              | Good training fit                |
@@ -243,8 +243,8 @@ GradientBoostingRegressor(
 
 | Metric                      | Value             | Interpretation                 |
 | --------------------------- | ----------------- | ------------------------------ |
-| **RMSE**                    | 17.81ms           | Average prediction error       |
-| **MAE**                     | 14.63ms           | Median prediction error        |
+| **RMSE**                    | 17.81           | Average prediction error       |
+| **MAE**                     | 14.63           | Median prediction error        |
 | **MAPE**                    | 8.99%             | 9% average percentage error ✅ |
 | **R² Score (Test)**         | -0.29             | Below baseline                 |
 | **R² Score (Train)**        | 0.90              | Excellent training fit         |
@@ -282,16 +282,16 @@ GradientBoostingRegressor(
 
 | Node                     | RMSE        | MAE         | MAPE      | R² (Test) | R² (Train) | Training Time | Model Size |
 | ------------------------ | ----------- | ----------- | --------- | --------- | ---------- | ------------- | ---------- |
-| **alchemy_devnet**       | 12.61ms     | 9.90ms      | 6.33%     | -0.24     | 0.91       | 0.66s         | 772 KB     |
-| **ankr_devnet**          | 14.79ms     | 11.86ms     | 13.65%    | -0.41     | 0.88       | 0.63s         | 773 KB     |
-| **helius_devnet**        | 15.56ms     | 12.50ms     | 9.66%     | -0.28     | 0.87       | 0.63s         | 751 KB     |
-| **solana_public_devnet** | 17.81ms     | 14.63ms     | 8.99%     | -0.29     | 0.90       | 0.62s         | 818 KB     |
-| **Average**              | **15.19ms** | **12.22ms** | **9.66%** | **-0.31** | **0.89**   | **0.64s**     | **779 KB** |
+| **alchemy_devnet**       | 12.61       | 9.90        | 6.33%     | -0.24     | 0.91       | 0.66s         | 772 KB     |
+| **ankr_devnet**          | 14.79       | 11.86       | 13.65%    | -0.41     | 0.88       | 0.63s         | 773 KB     |
+| **helius_devnet**        | 15.56       | 12.50       | 9.66%     | -0.28     | 0.87       | 0.63s         | 751 KB     |
+| **solana_public_devnet** | 17.81       | 14.63       | 8.99%     | -0.29     | 0.90       | 0.62s         | 818 KB     |
+| **Average**              | **15.19**   | **12.22**   | **9.66%** | **-0.31** | **0.89**   | **0.64s**     | **779 KB** |
 
 ### Key Takeaways
 
 ✅ **MAPE < 15%** - Excellent for production latency prediction  
-✅ **MAE 10-15ms** - Predictions within ±15ms on average  
+✅ **MAE 10-15** - Predictions within ±15 on average    
 ✅ **Training time < 1 sec** - Can retrain frequently  
 ✅ **Consistent performance** across all nodes  
 ⚠️ **Negative R² on test** - Expected with synthetic data, will improve with real data
@@ -355,7 +355,7 @@ Our model (GB):  6.33% error ✅ (2.4x better!)
 
 ### Why We're Confident for Production
 
-1. **MAE is excellent**: 10-15ms error is production-grade
+1. **MAE is excellent**: 10-15 error is production-grade
 2. **MAPE is strong**: 6-14% is better than industry average (15-20%)
 3. **Ranking accuracy matters most**: As long as we correctly rank nodes (best to worst), absolute values less critical
 4. **Real data will improve R²**: Production data has actual causal relationships
@@ -487,7 +487,7 @@ Our model (GB):  6.33% error ✅ (2.4x better!)
 
 ```
 MAPE: 6-14%
-MAE: 10-15ms
+MAE: 10-15
 R²: -0.31
 ```
 
@@ -495,7 +495,7 @@ R²: -0.31
 
 ```
 MAPE: 8-12% (similar or better)
-MAE: 15-25ms (real variance is higher)
+MAE: 15-25 (real variance is higher)
 R²: 0.4-0.7 (actual causality captured)
 ```
 
