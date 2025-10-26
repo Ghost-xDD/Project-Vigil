@@ -2,7 +2,8 @@ import asyncio
 import logging
 import random
 from datetime import datetime, timezone
-from typing import Dict, Optional, Tuple
+from typing import Dict, Optional, Tuple, List
+from collections import deque
 import httpx
 
 from app.core.config import settings
@@ -13,6 +14,9 @@ logger = logging.getLogger(__name__)
 
 # Global in-memory cache for latest metrics
 latest_metrics_cache: Dict[str, NodeMetrics] = {}
+
+# Global in-memory history storage (last 30 data points per node)
+metrics_history: Dict[str, deque] = {}
 
 
 async def get_slot_and_latency_async(
@@ -249,6 +253,12 @@ async def poll_nodes_job():
             )
             
             latest_metrics_cache[node_name] = metrics
+            
+            # Add to history (keep last 30 points)
+            if node_name not in metrics_history:
+                metrics_history[node_name] = deque(maxlen=30)
+            metrics_history[node_name].append(metrics)
+            
             logger.debug(f"[{node_name}] Metrics cached: {metrics}")
         
         # Calculate block height gap for node
@@ -271,6 +281,12 @@ async def poll_nodes_job():
         )
         
         latest_metrics_cache[settings.SIMULATED_NODE_NAME] = simulated_metrics
+        
+        # Add to history (keep last 30 points)
+        if settings.SIMULATED_NODE_NAME not in metrics_history:
+            metrics_history[settings.SIMULATED_NODE_NAME] = deque(maxlen=30)
+        metrics_history[settings.SIMULATED_NODE_NAME].append(simulated_metrics)
+        
         logger.info(
             f"[{settings.SIMULATED_NODE_NAME}] Simulated metrics - "
             f"Latency: {sim_latency_ms:.2f}ms, Slot: {sim_slot}, "

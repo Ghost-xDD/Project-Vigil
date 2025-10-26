@@ -47,6 +47,10 @@ ENV/
 *.log
 logs/
 
+# Status tracking (local development)
+STATUS.md
+training_output.log
+
 # OS
 .DS_Store
 Thumbs.db

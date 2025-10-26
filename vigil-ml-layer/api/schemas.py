@@ -6,7 +6,8 @@ from datetime import datetime
 class NodeMetric(BaseModel):
     """Single node metric data point"""
     timestamp: datetime
-    node_id: str
+    node_id: Optional[str] = None  # Optional, will use node_name if not provided
+    node_name: Optional[str] = None  # From Data Collector
     cpu_usage: Optional[float] = None
     memory_usage: Optional[float] = None
     disk_io: Optional[float] = None

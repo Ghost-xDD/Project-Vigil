@@ -78,6 +78,10 @@ def engineer_features(df: pd.DataFrame, config: Dict) -> pd.DataFrame:
         if 'node_id' not in df.columns:
             logger.error("Missing 'node_id' column.")
             raise KeyError("Missing 'node_id' column.")
+        
+        # CRITICAL: Preserve node_id as string BEFORE any operations
+        df['node_id'] = df['node_id'].astype(str)
+        logger.info(f"Unique node_ids at start: {df['node_id'].unique()}")
             
         df["timestamp"] = pd.to_datetime(df["timestamp"])
         df = df.sort_values(by=["node_id", "timestamp"])
@@ -132,7 +136,13 @@ def engineer_features(df: pd.DataFrame, config: Dict) -> pd.DataFrame:
 
         # Fill NaNs created by rolling/lag/trend
         # Using 0 is a simple strategy. ffill might be better but 0 is okay for now.
-        df = df.fillna(0)
+        # IMPORTANT: Don't fill metadata columns (node_id, client_type, timestamp)
+        metadata_cols = ['timestamp', 'node_id', 'client_type']
+        numeric_cols = [col for col in df.columns if col not in metadata_cols]
+        df[numeric_cols] = df[numeric_cols].fillna(0)
+        
+        # Ensure node_id remains as string (critical!)
+        df['node_id'] = df['node_id'].astype(str)
         
         logger.info(f"Feature engineering complete. DataFrame now has {len(df.columns)} columns.")
         return df

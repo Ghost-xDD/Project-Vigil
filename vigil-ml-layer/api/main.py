@@ -141,14 +141,35 @@ async def predict_routing(batch: MetricsBatch):
             )
         
         # Convert metrics to DataFrame
-        metrics_data = [metric.model_dump() for metric in batch.metrics]
+        # Use exclude_none to avoid node_id=None polluting the DataFrame
+        metrics_data = [metric.model_dump(exclude_none=True) for metric in batch.metrics]
         raw_df = pd.DataFrame(metrics_data)
         
+        logger.info(f"Received dataframe with columns: {list(raw_df.columns)}")
+        logger.info(f"Sample node_name values: {raw_df['node_name'].head().tolist() if 'node_name' in raw_df.columns else 'N/A'}")
+        
+        # Map node_name to node_id if needed (Data Collector uses node_name)
+        if 'node_name' in raw_df.columns:
+            raw_df['node_id'] = raw_df['node_name'].astype(str)  # Ensure string type
+            logger.info(f"Mapped node_name to node_id for {len(raw_df)} rows")
+            logger.info(f"Unique node_ids after mapping: {raw_df['node_id'].unique()}")
+        elif 'node_id' not in raw_df.columns:
+            logger.error("Neither node_name nor node_id found in data!")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Missing node identifier (node_name or node_id)"
+            )
+        
+        # Ensure node_id is always string type
+        raw_df['node_id'] = raw_df['node_id'].astype(str)
+        logger.info(f"Final node_ids before feature engineering: {raw_df['node_id'].unique()}")
+        
         # Add required columns if missing
+        # Fixed: Handle None values in node_id
         if 'client_type' not in raw_df.columns:
             # Infer client type from node_id (e.g., "agave_self_hosted" -> "agave")
             raw_df['client_type'] = raw_df['node_id'].apply(
-                lambda x: x.split('_')[0] if '_' in x else 'unknown'
+                lambda x: x.split('_')[0] if (x is not None and '_' in str(x)) else 'agave'
             )
         
         if 'error_rate' not in raw_df.columns:
@@ -173,16 +194,21 @@ async def predict_routing(batch: MetricsBatch):
         live_feature_map = {}
         unique_nodes = engineered_df['node_id'].unique()
         
+        logger.info(f"Unique nodes after feature engineering: {list(unique_nodes)}")
+        
         for node in unique_nodes:
             node_data = engineered_df[engineered_df['node_id'] == node]
             if len(node_data) > 0:
                 live_feature_map[node] = node_data.iloc[-1]
+                logger.debug(f"Added node {node} with {len(node_data)} data points")
         
         if not live_feature_map:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="No valid engineered features generated"
             )
+        
+        logger.info(f"Live feature map keys: {list(live_feature_map.keys())}")
         
         # Get recommendation from predictor
         logger.info(f"Generating predictions for {len(live_feature_map)} nodes...")

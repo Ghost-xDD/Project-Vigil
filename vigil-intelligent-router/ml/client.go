@@ -42,7 +42,8 @@ func NewClient(predictURL, metricsURL string, timeout time.Duration, nodeURLMap 
 // MetricData represents a single metric data point
 type MetricData struct {
 	Timestamp       string   `json:"timestamp"`
-	NodeID          string   `json:"node_id"`
+	NodeID          string   `json:"node_id,omitempty"`     // Optional - if missing, use NodeName
+	NodeName        string   `json:"node_name,omitempty"`   // From Data Collector
 	CPUUsage        *float64 `json:"cpu_usage,omitempty"`
 	MemoryUsage     *float64 `json:"memory_usage,omitempty"`
 	DiskIO          *float64 `json:"disk_io,omitempty"`
@@ -125,17 +126,41 @@ func (c *Client) fetchMetrics(ctx context.Context) ([]MetricData, error) {
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
 
+	c.logger.Debug("Fetched metrics from collector",
+		zap.Int("count", len(metrics)),
+		zap.Strings("sample_node_names", func() []string {
+			names := []string{}
+			for i := 0; i < 3 && i < len(metrics); i++ {
+				names = append(names, metrics[i].NodeName)
+			}
+			return names
+		}()))
+
 	return metrics, nil
 }
 
 // getPrediction sends metrics to ML service and gets a prediction
 func (c *Client) getPrediction(ctx context.Context, metrics []MetricData) (*PredictionResponse, error) {
+	// Ensure each metric has NodeID populated from NodeName if needed
+	for i := range metrics {
+		if metrics[i].NodeID == "" && metrics[i].NodeName != "" {
+			metrics[i].NodeID = metrics[i].NodeName
+			c.logger.Debug("Copied NodeName to NodeID",
+				zap.String("node", metrics[i].NodeID))
+		}
+	}
+	
 	reqBody := PredictionRequest{Metrics: metrics}
 	
 	jsonData, err := json.Marshal(reqBody)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
 	}
+	
+	c.logger.Debug("Sending to ML service",
+		zap.Int("metric_count", len(metrics)),
+		zap.String("first_100_chars", string(jsonData[:min(100, len(jsonData))])))
+
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.predictURL, bytes.NewBuffer(jsonData))
 	if err != nil {
@@ -160,6 +185,14 @@ func (c *Client) getPrediction(ctx context.Context, metrics []MetricData) (*Pred
 	}
 
 	return &prediction, nil
+}
+
+// Helper function
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 // GetRecommendedNodeURL extracts the RPC URL from node_id using the configured mapping
