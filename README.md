@@ -1,6 +1,8 @@
 # Project Vigil: 
 
-Vigil is a predictive intelligence layer for Solana's multi-client network. Our core product is the Vigil Intelligence API, a service that predicts network and node instability before it happens.
+Vigil is a predictive intelligence layer for Solana's multi-client network. 
+
+Our core product is the Vigil Intelligence API, a service that predicts network and node instability before it happens.
 
 ## 🎯 Overview
 
