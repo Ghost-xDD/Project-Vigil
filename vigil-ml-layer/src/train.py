@@ -7,8 +7,8 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import LogisticRegression
 from sklearn.neural_network import MLPRegressor
+from sklearn.ensemble import GradientBoostingRegressor
 from sklearn.metrics import classification_report, confusion_matrix, mean_squared_error
-import pmdarima as pm
 
 from src.utils import load_config, setup_logging, save_model
 
@@ -165,7 +165,8 @@ def train_failure_model(df: pd.DataFrame, features: List[str], config: Dict) -> 
 
 def train_latency_model_for_node(node_df: pd.DataFrame, features: List[str], node_id: str, config: Dict) -> None:
     """
-    Trains a SARIMAX model for a single node using auto_arima.
+    Trains a Gradient Boosting model for latency prediction for a single node.
+    Fast, accurate, and production-ready alternative to ARIMA.
     """
     logging.info(f"Starting latency model training for node: {node_id}...")
     try:
@@ -182,7 +183,7 @@ def train_latency_model_for_node(node_df: pd.DataFrame, features: List[str], nod
             
         y = node_df[target]
         
-        # Exogenous variables: all features *except* those derived from latency itself
+        # Features: all except those derived from latency itself (to avoid leakage)
         exog_features = [f for f in features if not f.startswith(target)]
         X = node_df[exog_features]
         
@@ -196,24 +197,79 @@ def train_latency_model_for_node(node_df: pd.DataFrame, features: List[str], nod
         
         logging.info(f"Training latency model on {len(y_train)} samples. Testing on {len(y_test)}.")
 
-        model = pm.auto_arima(
-            y_train,
-            exogenous=X_train,
-            m=model_config['seasonal_m'],
-            seasonal=True,
-            stepwise=True,
-            suppress_warnings=True,
-            error_action='ignore',
-            n_jobs=-1
+        # Production-grade Gradient Boosting Regressor
+        # Optimized for latency prediction with robust hyperparameters
+        model = GradientBoostingRegressor(
+            n_estimators=150,           # More trees for better accuracy
+            learning_rate=0.08,         # Slightly lower for better generalization
+            max_depth=6,                # Deeper trees to capture complex patterns
+            min_samples_split=15,       # Prevent overfitting on small nodes
+            min_samples_leaf=6,         # Smoother predictions
+            subsample=0.85,             # Stochastic GB for regularization
+            max_features='sqrt',        # Feature subsampling
+            loss='huber',               # Robust to outliers (better than squared)
+            alpha=0.9,                  # Huber loss parameter
+            random_state=42,
+            validation_fraction=0.1,    # Internal validation
+            n_iter_no_change=15,        # Early stopping
+            tol=0.0001,                 # Convergence tolerance
+            verbose=0
         )
         
-        logging.info(f"Best SARIMAX model for {node_id}: {model.order} {model.seasonal_order}")
-        logging.info(model.summary())
+        logging.info("Training with early stopping and validation...")
+        model.fit(X_train, y_train)
         
+        # Training summary
+        actual_estimators = model.n_estimators_  # Actual trees used (with early stopping)
+        logging.info(f"Gradient Boosting model trained for {node_id}")
+        logging.info(f"  Trees used: {actual_estimators}/{model.n_estimators} (early stopping)")
+        logging.info(f"  Max depth: {model.max_depth}, Learning rate: {model.learning_rate}")
+        
+        # Comprehensive evaluation on test set
         if not y_test.empty:
-            y_pred = model.predict(n_periods=len(y_test), exogenous=X_test)
+            y_pred = model.predict(X_test)
+            
+            # Multiple metrics for robust evaluation
             rmse = np.sqrt(mean_squared_error(y_test, y_pred))
-            logging.info(f"Latency model test RMSE for {node_id}: {rmse:.4f}")
+            mae = np.mean(np.abs(y_test - y_pred))
+            mape = np.mean(np.abs((y_test - y_pred) / y_test)) * 100  # Mean Absolute Percentage Error
+            r2 = model.score(X_test, y_test)
+            
+            # Calculate prediction intervals
+            errors = y_test - y_pred
+            p5, p95 = np.percentile(errors, [5, 95])
+            
+            logging.info(f"Latency model test metrics for {node_id}:")
+            logging.info(f"  RMSE: {rmse:.2f}ms")
+            logging.info(f"  MAE: {mae:.2f}ms") 
+            logging.info(f"  MAPE: {mape:.2f}%")
+            logging.info(f"  R² Score: {r2:.4f}")
+            logging.info(f"  90% Prediction Interval: [{p5:.2f}, {p95:.2f}]ms")
+            
+            # Training set performance (check for overfitting)
+            y_train_pred = model.predict(X_train)
+            train_r2 = model.score(X_train, y_train)
+            logging.info(f"  Train R²: {train_r2:.4f} (vs Test R²: {r2:.4f})")
+            
+            overfit_warning = train_r2 - r2
+            if overfit_warning > 0.1:
+                logging.warning(f"  ⚠️  Possible overfitting detected (gap: {overfit_warning:.4f})")
+            else:
+                logging.info(f"  ✓ Good generalization (gap: {overfit_warning:.4f})")
+            
+            # Feature importance analysis
+            feature_importance = pd.Series(
+                model.feature_importances_, 
+                index=exog_features
+            ).sort_values(ascending=False)
+            
+            # Calculate cumulative importance
+            cumsum = feature_importance.cumsum()
+            n_features_80 = (cumsum <= 0.8).sum()
+            
+            logging.info(f"Top 15 most important features for {node_id}:")
+            logging.info("\n" + feature_importance.head(15).to_string())
+            logging.info(f"  {n_features_80} features explain 80% of importance")
         
         model_filename = template.format(node_id=node_id) + ".joblib"
         save_model(model, os.path.join(models_dir, model_filename))

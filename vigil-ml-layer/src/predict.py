@@ -101,30 +101,44 @@ class SentryPredictor:
 
     def forecast_latency(self, node_id: str, exog_row: pd.Series) -> float:
         """
-        Forecasts latency for a single node, given a row of exogenous features.
+        Forecasts latency for a single node using Gradient Boosting model.
+        Production-ready with error handling and bounds checking.
         
         Args:
             node_id (str): The node to forecast for.
-            exog_row (pd.Series): The *UNSCALED* exogenous features.
+            exog_row (pd.Series): The feature vector for prediction.
+            
+        Returns:
+            float: Predicted latency in milliseconds (or penalty if model unavailable)
         """
         model = self.models['latency'].get(node_id)
         if model is None:
-            self.logger.warning(f"No latency model for {node_id}, returning default.")
-            return 9999.0 # Return a high penalty
+            self.logger.warning(f"No latency model for {node_id}, returning default penalty.")
+            return 9999.0  # High penalty for missing model
             
         try:
-            # Reshape exog row for prediction.
-            # pmdarima expects a numpy array
+            # Reshape for sklearn prediction (expects 2D array)
             exog_row_2d = exog_row.values.reshape(1, -1)
             
-            # Use [0] to get the first (and only) forecast value
-            forecast = model.predict(n_periods=1, exogenous=exog_row_2d)
-            # Fixed: Use iloc[0] instead of direct float() to avoid FutureWarning
-            return float(forecast[0]) if hasattr(forecast, '__len__') else float(forecast)
+            # Get prediction from Gradient Boosting model
+            prediction = model.predict(exog_row_2d)[0]
+            
+            # Sanity check: latency should be positive and reasonable
+            if prediction < 0:
+                self.logger.warning(f"Negative prediction for {node_id}: {prediction:.2f}ms, clipping to 0")
+                prediction = 0.0
+            elif prediction > 10000:
+                self.logger.warning(f"Extremely high prediction for {node_id}: {prediction:.2f}ms, capping at 10000")
+                prediction = 10000.0
+            
+            return float(prediction)
+            
+        except ValueError as e:
+            self.logger.error(f"Value error in latency forecast for {node_id}: {e}")
+            return 9999.0
         except Exception as e:
-            # FIX: Added exc_info=True to log the full error
-            self.logger.error(f"Error during latency forecast for {node_id}: {e}", exc_info=True)
-            return 9999.0 # High penalty on failure
+            self.logger.error(f"Unexpected error during latency forecast for {node_id}: {e}", exc_info=True)
+            return 9999.0  # High penalty on failure
 
     def generate_explanation(self, recommended_node: str, rec_pred: Dict, all_preds: List[Dict]) -> str:
         """
