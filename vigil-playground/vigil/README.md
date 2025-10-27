@@ -1,8 +1,36 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/pages/api-reference/create-next-app).
 
+## Vigil Playground
+
+Interactive dashboard and testing interface for the Vigil intelligent router system.
+
 ## Getting Started
 
-First, run the development server:
+### 1. Environment Setup
+
+Create a `.env.local` file with your configuration:
+
+```bash
+# For local development with Docker
+NEXT_PUBLIC_ROUTER_URL=http://localhost:8080
+
+# Or for production
+# NEXT_PUBLIC_ROUTER_URL=https://your-production-router.com
+```
+
+**Quick setup:**
+
+```bash
+echo "NEXT_PUBLIC_ROUTER_URL=http://localhost:8080" > .env.local
+```
+
+### 2. Install Dependencies
+
+```bash
+npm install
+```
+
+### 3. Run the Development Server
 
 ```bash
 npm run dev
@@ -15,6 +43,13 @@ bun dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+
+### Available Pages
+
+- **Dashboard** (`/dashboard`) - Real-time metrics and system monitoring
+- **Playground** (`/playground`) - Interactive RPC testing interface
+- **Chaos Engineering** (`/chaos`) - Failures and test resilience
+- **Comparison** (`/comparison`) - Compare Vigil vs direct RPC performance
 
 You can start editing the page by modifying `pages/index.tsx`. The page auto-updates as you edit the file.
 

@@ -42,6 +42,17 @@ func NewHandler(mlClient *ml.Client, cfg *config.Config, logger *zap.Logger) *Ha
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	startTime := time.Now()
 	
+	// Enable CORS for browser-based clients
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+	
+	// Handle preflight OPTIONS request
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	
 	// Only accept POST requests
 	if r.Method != http.MethodPost {
 		h.logger.Warn("Invalid request method",
@@ -177,6 +188,16 @@ func (h *Handler) forwardRequest(w http.ResponseWriter, originalReq *http.Reques
 // HealthCheckHandler returns a simple health check handler
 func HealthCheckHandler(logger *zap.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		// Enable CORS for health checks too
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		

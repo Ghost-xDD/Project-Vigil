@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Activity, Send, Terminal, Zap } from 'lucide-react';
 
@@ -15,6 +15,19 @@ export default function Playground() {
   const [statusCode, setStatusCode] = useState<number | null>(null);
   const [durationMs, setDurationMs] = useState<number | null>(null);
   const [errorMsg, setErrorMsg] = useState<string>('');
+  const [routerConnected, setRouterConnected] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    const checkRouter = async () => {
+      try {
+        const res = await fetch(endpoint);
+        setRouterConnected(res.ok);
+      } catch {
+        setRouterConnected(false);
+      }
+    };
+    checkRouter();
+  }, [endpoint]);
 
   const send = async () => {
     setLoading(true);
@@ -162,7 +175,25 @@ export default function Playground() {
             </div>
             <div className="space-y-3 text-sm">
               <label className="block">
-                <div className="text-white/70 mb-1">RPC Endpoint</div>
+                <div className="text-white/70 mb-1 flex items-center justify-between">
+                  <span>RPC Endpoint</span>
+                  {routerConnected !== null && (
+                    <span
+                      className={`text-xs flex items-center gap-1 ${
+                        routerConnected ? 'text-emerald-400' : 'text-red-400'
+                      }`}
+                    >
+                      <span
+                        className={`w-1.5 h-1.5 rounded-full ${
+                          routerConnected
+                            ? 'bg-emerald-400 animate-pulse'
+                            : 'bg-red-400'
+                        }`}
+                      />
+                      {routerConnected ? 'Connected' : 'Disconnected'}
+                    </span>
+                  )}
+                </div>
                 <input
                   value={endpoint}
                   onChange={(e) => setEndpoint(e.target.value)}
@@ -258,9 +289,33 @@ export default function Playground() {
                 <Send className={`w-4 h-4 ${loading ? 'animate-pulse' : ''}`} />
                 Send Request
               </button>
-              <p className="text-xs text-white/50">
-                Tip: Use the router endpoint to observe Vigil routing in action.
-              </p>
+              {routerConnected && endpoint.includes('8080') && (
+                <div className="text-xs bg-violet-500/10 border border-violet-500/20 rounded-md p-2.5">
+                  <div className="flex items-start gap-2">
+                    <Zap className="w-3.5 h-3.5 text-violet-400 mt-0.5 flex-shrink-0" />
+                    <div>
+                      <div className="text-violet-200 font-medium mb-1">
+                        Intelligent Router Active
+                      </div>
+                      <div className="text-white/60 leading-relaxed">
+                        Your requests are being routed through Vigil&apos;s
+                        ML-powered system. Each request is sent to the optimal
+                        Solana RPC node based on real-time performance
+                        predictions.
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+              {!routerConnected && routerConnected !== null && (
+                <div className="text-xs bg-red-500/10 border border-red-500/20 rounded-md p-2.5 text-red-300">
+                  Unable to connect to router. Make sure the Docker containers
+                  are running:{' '}
+                  <code className="bg-black/30 px-1.5 py-0.5 rounded">
+                    docker-compose up -d
+                  </code>
+                </div>
+              )}
               {errorMsg && (
                 <div className="text-xs text-red-300 bg-red-500/10 border border-red-500/20 rounded-md p-2">
                   {errorMsg}

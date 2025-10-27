@@ -66,22 +66,36 @@ func main() {
 		mux.HandleFunc("/health", proxy.HealthCheckHandler(logger))
 	}
 	
-	// Root endpoint with service info
+	// Root endpoint - handle both RPC requests and info
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		// Always set CORS headers for all requests
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+		
 		if r.URL.Path != "/" {
 			http.NotFound(w, r)
 			return
 		}
 		
+		// If it's a POST request or OPTIONS (CORS preflight), treat it as RPC
+		if r.Method == http.MethodPost || r.Method == http.MethodOptions {
+			proxyHandler.ServeHTTP(w, r)
+			return
+		}
+		
+		// Otherwise show service info for GET requests
 		w.Header().Set("Content-Type", "application/json")
 		fmt.Fprintf(w, `{
   "service": "Vigil Intelligent Router",
   "version": "1.0.0",
   "endpoints": {
     "rpc": "/rpc",
+    "root": "/",
     "health": "/health"
   },
-  "description": "ML-powered intelligent routing for Solana RPC requests"
+  "description": "ML-powered intelligent routing for Solana RPC requests",
+  "note": "POST JSON-RPC requests to / or /rpc"
 }`)
 	})
 
