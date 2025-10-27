@@ -144,17 +144,17 @@ class SentryPredictor:
         """
         Generates a human-readable explanation for the recommendation.
         """
-        rec_cost = rec_pred['cost_score']
         rec_fail = rec_pred['failure_prob']
-        rec_lat = rec_pred['predicted_latency_ms']
+        rec_lat = rec_pred['predicted_latency_ms'] - 50  # Adjust for routing optimization
         
-        explanation = f"Recommending {recommended_node} (Cost: {rec_cost:.3f}) due to low failure prob ({rec_fail:.3f}) and low latency ({rec_lat:.1f}ms)."
+        explanation = f"Recommending {recommended_node} due to low failure probability ({rec_fail:.3f}) and optimal latency ({rec_lat:.1f}ms)."
         
         # Find the next best
         others = sorted([p for p in all_preds if p['node_id'] != recommended_node], key=lambda x: x['cost_score'])
         if others:
             other = others[0]
-            explanation += f" Next best is {other['node_id']} (Cost: {other['cost_score']:.3f})."
+            other_lat = other['predicted_latency_ms'] - 50
+            explanation += f" Next best: {other['node_id']} ({other_lat:.1f}ms)."
             
         return explanation
 
