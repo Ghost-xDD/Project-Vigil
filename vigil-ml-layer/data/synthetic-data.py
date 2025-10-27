@@ -27,7 +27,7 @@ def simulate_failure_ramp(series, start_idx, length, ramp_max, clip_min=0, clip_
     series = np.clip(series, clip_min, clip_max)
     return series, start_idx, start_idx + length
 
-def generate_data(n_samples=2000, n_nodes=5):
+def generate_data(n_samples=2000, n_nodes=4):
     """
     Generates synthetic RPC node metrics data.
     
@@ -47,17 +47,20 @@ def generate_data(n_samples=2000, n_nodes=5):
     agave_count = 1
     firedancer_count = 1
 
-    for i in range(n_nodes):
-        
-        # Alternate client types and name nodes accordingly
-        if i % 2 == 0:
-            client_type = 'agave'
-            node_id = f'agave{agave_count}'
-            agave_count += 1
-        else:
-            client_type = 'firedancer'
-            node_id = f'firedancer{firedancer_count}'
-            firedancer_count += 1
+    # Define realistic node types based on real data
+    node_configs = [
+        {'node_id': 'helius_devnet', 'client_type': 'helius', 'lat_min': 550, 'lat_max': 900},
+        {'node_id': 'alchemy_devnet', 'client_type': 'alchemy', 'lat_min': 580, 'lat_max': 1000},
+        {'node_id': 'ankr_devnet', 'client_type': 'ankr', 'lat_min': 750, 'lat_max': 1250},
+        {'node_id': 'solana_public_devnet', 'client_type': 'solana', 'lat_min': 800, 'lat_max': 1900},
+    ]
+    
+    for i in range(min(n_nodes, len(node_configs))):
+        config = node_configs[i]
+        node_id = config['node_id']
+        client_type = config['client_type']
+        lat_min = config['lat_min']
+        lat_max = config['lat_max']
         
         # 1. Generate baseline AR(1) processes
         # CPU: High autocorrelation
@@ -103,21 +106,22 @@ def generate_data(n_samples=2000, n_nodes=5):
         # Mark the failure period
         failure_label[fail_start_idx:fail_end_idx] = 1
 
-        # 3. Generate Latency
+        # 3. Generate Latency (node-specific ranges based on real data)
         # Latency is correlated with all stress indicators
-        latency_base = (cpu * 0.5) + \
-                       (err * 2) + \
-                       (disk_io * 0.2) + \
-                       (block_height_gap * 1) + \
-                       np.random.normal(0, 10, n_samples)
-        latency = scale_to_range(latency_base, 50, 150) # Normal latency 50-150ms
+        latency_base = (cpu * 5.0) + \
+                       (err * 15) + \
+                       (disk_io * 2.0) + \
+                       (block_height_gap * 8) + \
+                       np.random.normal(0, 50, n_samples)
+        latency = scale_to_range(latency_base, lat_min, lat_max) # Node-specific realistic ranges
         
         # Add extra noise and spikes during failure
         failure_noise = np.zeros(n_samples)
-        failure_noise[fail_start_idx:fail_end_idx] = np.random.normal(50, 20, fail_end_idx - fail_start_idx) + \
-                                                    np.abs(err[fail_start_idx:fail_end_idx] * 5)
+        failure_spike = (lat_max - lat_min) * 0.8  # Failure adds 80% of normal range
+        failure_noise[fail_start_idx:fail_end_idx] = np.random.normal(failure_spike, failure_spike * 0.3, fail_end_idx - fail_start_idx) + \
+                                                    np.abs(err[fail_start_idx:fail_end_idx] * 10)
         latency = latency + failure_noise
-        latency = np.clip(latency, 10, 2000) # Clip latency (min 10ms, max 2s)
+        latency = np.clip(latency, lat_min * 0.5, lat_max * 2.0) # Allow some variance beyond normal range
 
         # 4. Create DataFrame
         node_df = pd.DataFrame({
@@ -148,8 +152,8 @@ if __name__ == "__main__":
     os.makedirs(RAW_DATA_DIR, exist_ok=True)
     os.makedirs(PROCESSED_DATA_DIR, exist_ok=True)
 
-    # Generate and save raw data
-    raw_df = generate_data(n_samples=2880, n_nodes=4) # 2880 minutes = 2 days
+    # Generate and save raw data (matches real devnet RPC providers)
+    raw_df = generate_data(n_samples=2880, n_nodes=4) # 2880 minutes = 2 days, 4 nodes
     raw_df.to_csv(RAW_FILE_PATH, index=False)
     print(f"Raw synthetic data saved to {RAW_FILE_PATH}")
     

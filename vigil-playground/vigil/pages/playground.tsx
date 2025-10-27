@@ -249,12 +249,6 @@ export default function Playground() {
                 Chaos
               </Link>
               <Link
-                href="/comparison"
-                className="px-2.5 py-1 rounded-md bg-white/5 border border-white/10 hover:bg-white/10"
-              >
-                Comparison
-              </Link>
-              <Link
                 href="/playground"
                 className="px-2.5 py-1 rounded-md bg-violet-600/20 border border-violet-500/30 text-violet-200"
               >

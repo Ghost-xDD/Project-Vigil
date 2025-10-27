@@ -86,6 +86,22 @@ def engineer_features(df: pd.DataFrame, config: Dict) -> pd.DataFrame:
         df["timestamp"] = pd.to_datetime(df["timestamp"])
         df = df.sort_values(by=["node_id", "timestamp"])
 
+        # Fill missing features with defaults from config
+        fe_config = config.get('feature_engineering', {})
+        feature_defaults = fe_config.get('feature_defaults', {})
+        
+        for feature, default_value in feature_defaults.items():
+            if feature in df.columns:
+                # Fill null values with default
+                null_count = df[feature].isna().sum()
+                if null_count > 0:
+                    logger.info(f"Filling {null_count} null values in '{feature}' with default: {default_value}")
+                    df[feature] = df[feature].fillna(default_value)
+            else:
+                # Feature doesn't exist, create it with default value
+                logger.info(f"Creating missing feature '{feature}' with default value: {default_value}")
+                df[feature] = default_value
+
         # --- New Feature Types ---
         # 1. Engineer Interaction features (e.g., cpu * error)
         df = engineer_interaction_features(df, config)

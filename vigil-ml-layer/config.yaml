@@ -1,55 +1,65 @@
 # Configuration for the Sentry ML Layer
 
 # --- Data Paths ---
-data_dir: "data"
-raw_data_file: "data/raw/synthetic_metrics.csv"
-processed_data_file: "data/processed/engineered_metrics.csv"
+data_dir: 'data'
+raw_data_file: 'data/raw/synthetic_metrics.csv'
+processed_data_file: 'data/processed/engineered_metrics.csv'
 
 # --- Model Storage ---
 # Base directory for all models
-models_dir: "models"
+models_dir: 'models'
 # Directory for other artifacts (feature lists, thresholds)
-artifacts_dir: "artifacts"
+artifacts_dir: 'artifacts'
 
 # Base filenames (script will add extensions like .joblib or .keras)
-anomaly_model_base_name: "anomaly_detector"
-failure_model_base_name: "failure_classifier"
+anomaly_model_base_name: 'anomaly_detector'
+failure_model_base_name: 'failure_classifier'
 # Template for latency models
-latency_model_template: "latency_model_{node_id}" # .joblib will be added
+latency_model_template: 'latency_model_{node_id}' # .joblib will be added
 
-# --- New features to improve latency model ---
+# --- Interaction features (will use defaults for missing values) ---
 interaction_pairs:
-  - ['cpu_usage', 'error_rate']
-  - ['memory_usage', 'block_height_gap']
-  - ['disk_io', 'cpu_usage']
+  - ['error_rate', 'block_height_gap']
+  - ['latency_ms', 'error_rate']
+  - ['cpu_usage', 'error_rate'] # Future: will use default until real data available
+  - ['memory_usage', 'block_height_gap'] # Future: will use default until real data available
 
 # --- Logging ---
-log_file: "logs/sentry_ml.log"
-log_level: "INFO" # e.g., DEBUG, INFO, WARNING, ERROR
+log_file: 'logs/sentry_ml.log'
+log_level: 'INFO' # e.g., DEBUG, INFO, WARNING, ERROR
 
 # --- Feature Engineering ---
 feature_engineering:
+  # All possible metrics (will handle gracefully if not available)
   metrics_to_engineer:
-    - 'cpu_usage'
-    - 'memory_usage'
-    - 'error_rate'
-    - 'latency_ms'
-    - 'disk_io'
-    - 'block_height_gap'
+    - 'latency_ms' # Always available
+    - 'error_rate' # Derived from is_healthy
+    - 'block_height_gap' # Always available
+    - 'cpu_usage' # Future: when monitoring added
+    - 'memory_usage' # Future: when monitoring added
+    - 'disk_io' # Future: when monitoring added
+
+  # Default values for missing features (used when feature is null/unavailable)
+  feature_defaults:
+    cpu_usage: 50.0 # Assume normal CPU when unavailable
+    memory_usage: 60.0 # Assume normal memory when unavailable
+    disk_io: 20.0 # Assume normal disk I/O when unavailable
+
   rolling_windows:
-    - 5  # 5-minute rolling stats
+    - 5 # 5-minute rolling stats
     - 10 # 10-minute rolling stats
   lag_periods:
-    - 1  # 1-minute lag
-    - 2  # 2-minute lag
+    - 1 # 1-minute lag
+    - 2 # 2-minute lag
 
   # Thresholds for creating binary "danger" flags
   thresholds:
-    cpu_usage: 80.0
-    memory_usage: 85.0
     error_rate: 10.0
     block_height_gap: 5
-    disk_io: 50.0
+    latency_ms: 1200.0
+    cpu_usage: 80.0 # Future use
+    memory_usage: 85.0 # Future use
+    disk_io: 50.0 # Future use
 
 # --- Model Training ---
 # Common parameters
@@ -82,13 +92,13 @@ failure_model:
 latency_model:
   # Model: pmdarima.auto_arima (SARIMAX)
   target_column: 'latency_ms'
-  test_size: 200     # Absolute number of samples for test set (per node)
-  min_obs: 100       # Min samples to train
-  seasonal_m: 60   # Seasonal period (60 min = 1 hour)
+  test_size: 200 # Absolute number of samples for test set (per node)
+  min_obs: 100 # Min samples to train
+  seasonal_m: 60 # Seasonal period (60 min = 1 hour)
 
 # --- API & Routing ---
 # Number of recent data points to use for live feature engineering
-prediction_history_size: 15 
+prediction_history_size: 15
 
 optimization:
   weight_failure: 0.7 # 70% importance on failure probability

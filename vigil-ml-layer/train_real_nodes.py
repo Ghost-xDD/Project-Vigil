@@ -68,17 +68,20 @@ def generate_data_for_real_nodes(n_samples=2880, nodes=None):
         # Determine client type
         client_type = 'agave'  # All devnet nodes typically run Agave
         
-        # Generate base metrics with AR(1) processes
-        cpu = scale_to_range(generate_ar1_series(n_samples, phi=0.9, std_dev=5), 30, 80)
-        memory = scale_to_range(generate_ar1_series(n_samples, phi=0.85, std_dev=3), 40, 75)
-        disk_io = scale_to_range(generate_ar1_series(n_samples, phi=0.7, std_dev=10), 10, 60)
+        # Determine realistic latency ranges per node (based on real measurements)
+        latency_ranges = {
+            'helius_devnet': (550, 900),
+            'alchemy_devnet': (580, 1000),
+            'ankr_devnet': (750, 1250),
+            'solana_public_devnet': (800, 1900),
+        }
+        lat_min, lat_max = latency_ranges.get(node_id, (600, 1200))
         
-        # Latency with some variation per node
-        base_latency = 50 + (i * 20)  # Different base latency per node
+        # Generate latency with autocorrelation
         latency = scale_to_range(
-            generate_ar1_series(n_samples, phi=0.8, std_dev=15), 
-            base_latency, 
-            base_latency + 100
+            generate_ar1_series(n_samples, phi=0.8, std_dev=50), 
+            lat_min, 
+            lat_max
         )
         
         # Block height gap (mostly 0-2, occasional spikes)
@@ -100,21 +103,21 @@ def generate_data_for_real_nodes(n_samples=2880, nodes=None):
             # Mark as unhealthy
             is_healthy[fail_start:fail_start + fail_length] = 0
             
-            # Ramp up stress indicators
-            cpu, _, _ = simulate_failure_ramp(cpu, fail_start, fail_length, 20, 0, 100)
-            memory, _, _ = simulate_failure_ramp(memory, fail_start, fail_length, 25, 0, 100)
-            latency, _, _ = simulate_failure_ramp(latency, fail_start, fail_length, 300, 0, 2000)
+            # Ramp up latency and error rate during failures
+            latency_spike = (lat_max - lat_min) * 1.2  # Add 120% of range during failures
+            latency, _, _ = simulate_failure_ramp(latency, fail_start, fail_length, latency_spike, lat_min * 0.8, lat_max * 2.5)
             error_rate, _, _ = simulate_failure_ramp(error_rate, fail_start, fail_length, 50, 0, 100)
         
         # Create dataframe for this node
+        # Use defaults for cpu/memory/disk (will be replaced with real values when available)
         for t in range(n_samples):
             data.append({
                 'timestamp': time_index[t],
                 'node_id': node_id,
                 'client_type': client_type,
-                'cpu_usage': cpu[t],
-                'memory_usage': memory[t],
-                'disk_io': disk_io[t],
+                'cpu_usage': 50.0,  # Default: normal load (will use real when available)
+                'memory_usage': 60.0,  # Default: normal memory (will use real when available)
+                'disk_io': 20.0,  # Default: normal I/O (will use real when available)
                 'latency_ms': latency[t],
                 'block_height_gap': int(block_gap[t]),
                 'error_rate': error_rate[t],
