@@ -158,8 +158,17 @@ func (h *Handler) forwardRequest(w http.ResponseWriter, originalReq *http.Reques
 	}
 	defer resp.Body.Close()
 
-	// Copy response headers
+	// Copy response headers, but skip CORS headers (we set our own)
 	for key, values := range resp.Header {
+		// Skip CORS headers from backend to avoid duplicates
+		if key == "Access-Control-Allow-Origin" ||
+			key == "Access-Control-Allow-Methods" ||
+			key == "Access-Control-Allow-Headers" ||
+			key == "Access-Control-Allow-Credentials" ||
+			key == "Access-Control-Max-Age" ||
+			key == "Access-Control-Expose-Headers" {
+			continue
+		}
 		for _, value := range values {
 			w.Header().Add(key, value)
 		}

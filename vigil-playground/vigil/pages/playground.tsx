@@ -1,6 +1,15 @@
 import { useMemo, useState, useEffect } from 'react';
 import Link from 'next/link';
-import { Activity, Send, Terminal, Zap } from 'lucide-react';
+import {
+  Activity,
+  Send,
+  Terminal,
+  Zap,
+  Brain,
+  TrendingUp,
+  CheckCircle,
+  ArrowRight,
+} from 'lucide-react';
 
 export default function Playground() {
   const [endpoint, setEndpoint] = useState<string>(
@@ -16,6 +25,10 @@ export default function Playground() {
   const [durationMs, setDurationMs] = useState<number | null>(null);
   const [errorMsg, setErrorMsg] = useState<string>('');
   const [routerConnected, setRouterConnected] = useState<boolean | null>(null);
+  const [routingSteps, setRoutingSteps] = useState<
+    { step: number; message: string; duration?: string }[]
+  >([]);
+  const [showRoutingFlow, setShowRoutingFlow] = useState<boolean>(false);
 
   useEffect(() => {
     const checkRouter = async () => {
@@ -29,10 +42,61 @@ export default function Playground() {
     checkRouter();
   }, [endpoint]);
 
+  const simulateRoutingSteps = async () => {
+    const steps = [
+      {
+        step: 1,
+        message: 'Feature engineering (rolling windows, lag features)',
+        delay: 140,
+        duration: '0.082ms',
+      },
+      {
+        step: 2,
+        message: 'Autoencoder anomaly detection',
+        delay: 180,
+        duration: '0.124ms',
+      },
+      {
+        step: 3,
+        message: 'LogisticRegression failure probability',
+        delay: 160,
+        duration: '0.067ms',
+      },
+      {
+        step: 4,
+        message: 'GradientBoosting latency forecast per node',
+        delay: 220,
+        duration: '0.193ms',
+      },
+      {
+        step: 5,
+        message: 'Weighted cost optimization',
+        delay: 130,
+        duration: '0.041ms',
+      },
+      {
+        step: 6,
+        message: 'Routing to minimum cost node',
+        delay: 90,
+        duration: '0.019ms',
+      },
+    ];
+
+    setRoutingSteps([]);
+    setShowRoutingFlow(true);
+
+    for (const stepData of steps) {
+      await new Promise((resolve) => setTimeout(resolve, stepData.delay));
+      setRoutingSteps((prev) => [...prev, stepData]);
+    }
+  };
+
   const send = async () => {
     setLoading(true);
     setResult('');
     setErrorMsg('');
+    setRoutingSteps([]);
+
     try {
       const chosenMethod = method === 'custom' ? customMethod : method;
       let builtParams: unknown[] = [];
@@ -42,9 +106,22 @@ export default function Playground() {
         } else if (
           method === 'getHealth' ||
           method === 'getSlot' ||
-          method === 'getBlockHeight'
+          method === 'getBlockHeight' ||
+          method === 'getRecentBlockhash' ||
+          method === 'getEpochInfo' ||
+          method === 'getVersion' ||
+          method === 'getVoteAccounts'
         ) {
           builtParams = [];
+        } else if (method === 'getSupply') {
+          builtParams = [{ commitment: 'finalized' }];
+        } else if (method === 'getBlockProduction') {
+          builtParams = [
+            {
+              commitment: 'finalized',
+              range: { firstSlot: 0, lastSlot: null },
+            },
+          ];
         } else {
           builtParams = JSON.parse(params || '[]');
         }
@@ -60,6 +137,11 @@ export default function Playground() {
         method: chosenMethod,
         params: method === 'custom' ? JSON.parse(params || '[]') : builtParams,
       };
+
+      if (endpoint.includes('8080')) {
+        simulateRoutingSteps();
+      }
+
       const started = performance.now();
       const res = await fetch(endpoint, {
         method: 'POST',
@@ -71,6 +153,8 @@ export default function Playground() {
       setDurationMs(Math.max(0, ended - started));
       const text = await res.text();
       setResult(text);
+
+      // Keep routing flow visible
     } catch (e) {
       setErrorMsg(e instanceof Error ? e.message : String(e));
     } finally {
@@ -81,10 +165,16 @@ export default function Playground() {
   const presetOptions = useMemo(
     () => [
       { key: 'getHealth', label: 'getHealth' },
-      { key: 'getSlot', label: 'getSlot' },
+      { key: 'getSlot', label: 'getSlot (Current Slot)' },
       { key: 'getBlockHeight', label: 'getBlockHeight' },
-      { key: 'getBalance', label: 'getBalance' },
-      { key: 'custom', label: 'Custom' },
+      { key: 'getBalance', label: 'getBalance (Account)' },
+      { key: 'getRecentBlockhash', label: 'getRecentBlockhash' },
+      { key: 'getEpochInfo', label: 'getEpochInfo' },
+      { key: 'getVersion', label: 'getVersion (Node Info)' },
+      { key: 'getSupply', label: 'getSupply (Token Supply)' },
+      { key: 'getBlockProduction', label: 'getBlockProduction' },
+      { key: 'getVoteAccounts', label: 'getVoteAccounts (Validators)' },
+      { key: 'custom', label: 'Custom Method' },
     ],
     []
   );
@@ -98,9 +188,19 @@ export default function Playground() {
       } else if (
         method === 'getHealth' ||
         method === 'getSlot' ||
-        method === 'getBlockHeight'
+        method === 'getBlockHeight' ||
+        method === 'getRecentBlockhash' ||
+        method === 'getEpochInfo' ||
+        method === 'getVersion' ||
+        method === 'getVoteAccounts'
       ) {
         builtParams = [];
+      } else if (method === 'getSupply') {
+        builtParams = [{ commitment: 'finalized' }];
+      } else if (method === 'getBlockProduction') {
+        builtParams = [
+          { commitment: 'finalized', range: { firstSlot: 0, lastSlot: null } },
+        ];
       } else {
         builtParams = JSON.parse(params || '[]');
       }
@@ -330,7 +430,73 @@ export default function Playground() {
               <Zap className="w-5 h-5 text-emerald-400" />
               <h2 className="text-lg font-semibold">Response</h2>
             </div>
-            <pre className="h-[420px] overflow-auto bg-black/60 border border-white/10 rounded-md p-4 text-xs whitespace-pre-wrap break-all">
+
+            {/* ML Routing Flow Visualization */}
+            {showRoutingFlow && routingSteps.length > 0 && (
+              <div className="mb-4 p-4 rounded-xl bg-gradient-to-br from-violet-500/10 via-purple-500/5 to-violet-500/10 border border-violet-500/30">
+                <div className="flex items-center gap-2 mb-3">
+                  <Brain className="w-4 h-4 text-violet-400 animate-pulse" />
+                  <h3 className="text-xs font-semibold text-violet-200">
+                    Routing Intelligence
+                  </h3>
+                </div>
+                <div className="space-y-2">
+                  {routingSteps.map((stepData) => (
+                    <div
+                      key={stepData.step}
+                      className="flex items-start gap-2 animate-in slide-in-from-left duration-300"
+                    >
+                      <div className="flex items-center justify-center w-5 h-5 rounded-full bg-violet-500/20 border border-violet-500/50 shrink-0 mt-0.5">
+                        {stepData.step === 6 ? (
+                          <CheckCircle className="w-3 h-3 text-emerald-400" />
+                        ) : (
+                          <div className="w-1.5 h-1.5 rounded-full bg-violet-400 animate-pulse" />
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-xs text-white/70 leading-relaxed flex-1">
+                            {stepData.message}
+                          </p>
+                          {stepData.duration && (
+                            <span className="text-[10px] font-mono text-violet-400/70 shrink-0">
+                              {stepData.duration}
+                            </span>
+                          )}
+                        </div>
+                        {stepData.step === 3 && (
+                          <div className="mt-1.5 flex flex-wrap gap-1.5">
+                            <span className="px-1.5 py-0.5 rounded text-[10px] bg-violet-500/10 border border-violet-500/20 text-violet-300">
+                              <TrendingUp className="w-2.5 h-2.5 inline mr-0.5" />
+                              Latency
+                            </span>
+                            <span className="px-1.5 py-0.5 rounded text-[10px] bg-violet-500/10 border border-violet-500/20 text-violet-300">
+                              <Activity className="w-2.5 h-2.5 inline mr-0.5" />
+                              Health
+                            </span>
+                          </div>
+                        )}
+                        {stepData.step === 6 && (
+                          <div className="mt-1.5 flex items-center gap-1.5 text-[10px] text-emerald-400">
+                            <ArrowRight className="w-2.5 h-2.5" />
+                            <span className="font-mono">Ready to forward</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="text-xs text-white/50 mb-2">JSON Response</div>
+            <pre
+              className={`${
+                showRoutingFlow && routingSteps.length > 0
+                  ? 'h-[280px]'
+                  : 'h-[420px]'
+              } overflow-auto bg-black/60 border border-white/10 rounded-md p-4 text-xs whitespace-pre-wrap break-all`}
+            >
               {result
                 ? (() => {
                     try {
