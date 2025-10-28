@@ -65,7 +65,7 @@ export default function Dashboard() {
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<string>('—');
   const [range, setRange] = useState<'5m' | '15m' | '1h'>('15m');
-  const [autoPoll, setAutoPoll] = useState<boolean>(true);
+  const [autoPoll, setAutoPoll] = useState<boolean>(false);
   const [pollMs, setPollMs] = useState<number>(5000);
   const [statsLine, setStatsLine] = useState({ mae: 0, mape: 0, acc: 0 });
   interface NodeLog {
