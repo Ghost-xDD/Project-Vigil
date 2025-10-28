@@ -18,9 +18,10 @@ export default function Playground() {
   const { ready, authenticated, logout } = usePrivy();
   const router = useRouter();
 
-  const [endpoint, setEndpoint] = useState<string>(
-    process.env.NEXT_PUBLIC_ROUTER_URL || 'http://localhost:8080'
-  );
+  const actualEndpoint = process.env.NEXT_PUBLIC_ROUTER_URL || '';
+
+  const [displayUrl] = useState<string>('vigil://predictive-rpc.solana');
+
   const [method, setMethod] = useState<string>('getHealth');
   const [customMethod, setCustomMethod] = useState<string>('getHealth');
   const [account, setAccount] = useState<string>('');
@@ -39,14 +40,14 @@ export default function Playground() {
   useEffect(() => {
     const checkRouter = async () => {
       try {
-        const res = await fetch(endpoint);
+        const res = await fetch(actualEndpoint);
         setRouterConnected(res.ok);
       } catch {
         setRouterConnected(false);
       }
     };
     checkRouter();
-  }, [endpoint]);
+  }, [actualEndpoint]);
 
   const simulateRoutingSteps = async () => {
     const steps = [
@@ -144,12 +145,11 @@ export default function Playground() {
         params: method === 'custom' ? JSON.parse(params || '[]') : builtParams,
       };
 
-      if (endpoint.includes('8080')) {
-        simulateRoutingSteps();
-      }
+      // Always show routing steps for Vigil
+      simulateRoutingSteps();
 
       const started = performance.now();
-      const res = await fetch(endpoint, {
+      const res = await fetch(actualEndpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -315,10 +315,10 @@ export default function Playground() {
                   )}
                 </div>
                 <input
-                  value={endpoint}
-                  onChange={(e) => setEndpoint(e.target.value)}
-                  className="w-full bg-white/5 border border-white/10 rounded-md px-3 py-2 outline-none focus:ring-1 focus:ring-violet-500"
-                  placeholder="http://localhost:8080"
+                  value={displayUrl}
+                  readOnly
+                  className="w-full bg-violet-500/10 border border-violet-500/30 rounded-md px-3 py-2 outline-none text-violet-200 font-mono cursor-default"
+                  title={`Actual endpoint: ${actualEndpoint}`}
                 />
               </label>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -409,7 +409,7 @@ export default function Playground() {
                 <Send className={`w-4 h-4 ${loading ? 'animate-pulse' : ''}`} />
                 Send Request
               </button>
-              {routerConnected && endpoint.includes('8080') && (
+              {routerConnected && (
                 <div className="text-xs bg-violet-500/10 border border-violet-500/20 rounded-md p-2.5">
                   <div className="flex items-start gap-2">
                     <Zap className="w-3.5 h-3.5 text-violet-400 mt-0.5 flex-shrink-0" />
@@ -429,11 +429,8 @@ export default function Playground() {
               )}
               {!routerConnected && routerConnected !== null && (
                 <div className="text-xs bg-red-500/10 border border-red-500/20 rounded-md p-2.5 text-red-300">
-                  Unable to connect to router. Make sure the Docker containers
-                  are running:{' '}
-                  <code className="bg-black/30 px-1.5 py-0.5 rounded">
-                    docker-compose up -d
-                  </code>
+                  Unable to connect to Vigil router. Ensure services are
+                  running.
                 </div>
               )}
               {errorMsg && (
