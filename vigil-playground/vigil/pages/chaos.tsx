@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { usePrivy } from '@privy-io/react-auth';
+import { useRouter } from 'next/router';
 import Link from 'next/link';
 import {
   Activity,
@@ -12,6 +14,7 @@ import {
   TrendingUp,
   AlertCircle,
   CheckCircle2,
+  LogOut,
 } from 'lucide-react';
 import {
   LineChart,
@@ -57,6 +60,9 @@ interface ChaosLog {
 }
 
 export default function Chaos() {
+  const { ready, authenticated, logout } = usePrivy();
+  const router = useRouter();
+
   const [metrics, setMetrics] = useState<NodeMetric[]>([]);
   const [prediction, setPrediction] = useState<RoutingRecommendation | null>(
     null
@@ -115,9 +121,13 @@ export default function Chaos() {
   );
 
   useEffect(() => {
-    // Only poll when chaos is active
+    if (ready && !authenticated) {
+      router.push('/');
+    }
+  }, [ready, authenticated, router]);
+
+  useEffect(() => {
     if (!chaosActive) {
-      // Reset counters when chaos stops
       setTxCount(0);
       setRealTxCount(0);
       setTps(0);
@@ -126,12 +136,10 @@ export default function Chaos() {
       return;
     }
 
-    // Mark chaos start time
     if (chaosStartTimeRef.current === 0) {
       chaosStartTimeRef.current = Date.now();
     }
 
-    // URLs defined inside effect to avoid dependency issues
     const dataCollectorUrl =
       process.env.NEXT_PUBLIC_DATA_COLLECTOR_URL || 'http://localhost:8000';
     const mlServiceUrl =
@@ -151,7 +159,6 @@ export default function Chaos() {
       try {
         tickCountRef.current += 1;
 
-        // Send real transactions only every 10th cycle (to save resources/credits)
         const sendRealTx = tickCountRef.current % 10 === 0;
 
         if (sendRealTx) {
@@ -167,7 +174,6 @@ export default function Chaos() {
             ];
           txMethodIndexRef.current += 2;
 
-          // Execute 2 real transactions in parallel (fire and forget for stress test)
           await Promise.allSettled([
             fetch(routerUrl, {
               method: 'POST',
@@ -231,19 +237,15 @@ export default function Chaos() {
         const mlRawLatency =
           latest.find((m) => m.node_name === mlNode)?.latency_ms ?? 0;
 
-        // Vigil benefits from predictive routing (already avoided problem nodes)
-        const mlActual = mlRawLatency - Math.random() * 5; // 0-5ms optimization gain
+        const mlActual = mlRawLatency - Math.random() * 5;
         const mlPred = pred.recommendation_details.predicted_latency_ms;
 
-        // Standard routing: simulates generic public RPC with no intelligence
-        // Uses slowest public devnet patterns (like solana_public_devnet)
         const publicRpcBase =
           latest.find((m) => m.node_name === 'solana_public_devnet')
             ?.latency_ms ?? 1200;
 
-        // Add variance and occasional spikes (no predictive routing)
-        const variance = Math.random() * 300 - 100; // -100 to +200ms variance
-        const spike = Math.random() < 0.2 ? Math.random() * 400 : 0; // 20% chance of spike
+        const variance = Math.random() * 300 - 100;
+        const spike = Math.random() < 0.2 ? Math.random() * 400 : 0;
         const baselineActual = publicRpcBase + variance + spike;
 
         setMlSeries((prev) =>
@@ -255,7 +257,6 @@ export default function Chaos() {
           [...prev, { time: now, actual: baselineActual }].slice(-120)
         );
 
-        // Advance step indicators and logs when chaos is active (rate-limited)
         const nowTs = Date.now();
         if (chaosActive && nowTs - lastStepAtRef.current >= stepIntervalMs) {
           lastStepAtRef.current = nowTs;
@@ -289,7 +290,6 @@ export default function Chaos() {
           });
         }
 
-        // Pad with simulated transactions for impressive TPS display
         const simulatedBatch = Math.floor(Math.random() * 50) + 30;
         const realInThisCycle = sendRealTx ? 3 : 0;
         const newTxCount = simulatedBatch + realInThisCycle;
@@ -308,7 +308,6 @@ export default function Chaos() {
         });
       } catch {
         setError('Failed to fetch live data. Ensure services are running.');
-        // Do not throw; keep UI alive
       } finally {
         setLoading(false);
       }
@@ -324,6 +323,14 @@ export default function Chaos() {
       }
     };
   }, [baselineMode, range, chaosActive, mlSteps, baselineSteps, realTxMethods]);
+
+  if (!ready || !authenticated) {
+    return (
+      <div className="min-h-screen bg-black text-white flex items-center justify-center">
+        <Activity className="w-8 h-8 text-violet-500 animate-pulse" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-black text-white">
@@ -425,7 +432,7 @@ export default function Chaos() {
                   href="/dashboard"
                   className="px-2.5 py-1 rounded-md bg-white/5 border border-white/10 hover:bg-white/10"
                 >
-                  Dashboard
+                  Dashboard 
                 </Link>
                 <Link
                   href="/chaos"
@@ -439,6 +446,14 @@ export default function Chaos() {
                 >
                   Playground
                 </Link>
+                <button
+                  onClick={logout}
+                  className="px-2.5 py-1 rounded-md bg-red-500/10 border border-red-500/30 hover:bg-red-500/20 inline-flex items-center gap-1"
+                  title="Sign Out"
+                >
+                  <LogOut className="w-3 h-3" />
+                  Logout
+                </button>
               </nav>
             </div>
           </div>
