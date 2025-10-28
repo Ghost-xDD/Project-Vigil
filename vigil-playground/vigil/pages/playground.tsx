@@ -1,4 +1,6 @@
 import { useMemo, useState, useEffect } from 'react';
+import { usePrivy } from '@privy-io/react-auth';
+import { useRouter } from 'next/router';
 import Link from 'next/link';
 import {
   Activity,
@@ -9,9 +11,13 @@ import {
   TrendingUp,
   CheckCircle,
   ArrowRight,
+  LogOut,
 } from 'lucide-react';
 
 export default function Playground() {
+  const { ready, authenticated, logout } = usePrivy();
+  const router = useRouter();
+
   const [endpoint, setEndpoint] = useState<string>(
     process.env.NEXT_PUBLIC_ROUTER_URL || 'http://localhost:8080'
   );
@@ -153,8 +159,6 @@ export default function Playground() {
       setDurationMs(Math.max(0, ended - started));
       const text = await res.text();
       setResult(text);
-
-      // Keep routing flow visible
     } catch (e) {
       setErrorMsg(e instanceof Error ? e.message : String(e));
     } finally {
@@ -178,6 +182,12 @@ export default function Playground() {
     ],
     []
   );
+
+  useEffect(() => {
+    if (ready && !authenticated) {
+      router.push('/');
+    }
+  }, [ready, authenticated, router]);
 
   const requestPreview = useMemo(() => {
     const chosenMethod = method === 'custom' ? customMethod : method;
@@ -220,6 +230,14 @@ export default function Playground() {
     }
   }, [method, customMethod, params, account]);
 
+  if (!ready || !authenticated) {
+    return (
+      <div className="min-h-screen bg-black text-white flex items-center justify-center">
+        <Activity className="w-8 h-8 text-violet-500 animate-pulse" />
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-black text-white">
       {/* Background */}
@@ -254,6 +272,14 @@ export default function Playground() {
               >
                 Playground
               </Link>
+              <button
+                onClick={logout}
+                className="px-2.5 py-1 rounded-md bg-red-500/10 border border-red-500/30 hover:bg-red-500/20 inline-flex items-center gap-1"
+                title="Sign Out"
+              >
+                <LogOut className="w-3 h-3" />
+                Logout
+              </button>
             </nav>
           </div>
         </div>

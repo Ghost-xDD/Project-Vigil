@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react';
+import { usePrivy } from '@privy-io/react-auth';
+import { useRouter } from 'next/router';
 import {
   LineChart,
   Line,
@@ -15,6 +17,7 @@ import {
   Brain,
   RefreshCcw,
   Clock,
+  LogOut,
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -43,6 +46,9 @@ interface RoutingRecommendation {
 }
 
 export default function Dashboard() {
+  const { ready, authenticated, logout } = usePrivy();
+  const router = useRouter();
+
   const [metrics, setMetrics] = useState<NodeMetric[]>([]);
   const [prediction, setPrediction] = useState<RoutingRecommendation | null>(
     null
@@ -60,7 +66,7 @@ export default function Dashboard() {
   const [lastUpdated, setLastUpdated] = useState<string>('—');
   const [range, setRange] = useState<'5m' | '15m' | '1h'>('15m');
   const [autoPoll, setAutoPoll] = useState<boolean>(true);
-  const [pollMs, setPollMs] = useState<number>(5000); // Default 5s to reduce API calls
+  const [pollMs, setPollMs] = useState<number>(5000);
   const [statsLine, setStatsLine] = useState({ mae: 0, mape: 0, acc: 0 });
   interface NodeLog {
     time: string;
@@ -70,8 +76,14 @@ export default function Dashboard() {
   }
   const [nodeLogs, setNodeLogs] = useState<Record<string, NodeLog[]>>({});
 
+  // Authentication redirect
   useEffect(() => {
-    // Only poll if autoPoll is enabled
+    if (ready && !authenticated) {
+      router.push('/');
+    }
+  }, [ready, authenticated, router]);
+
+  useEffect(() => {
     if (!autoPoll) {
       return;
     }
@@ -79,7 +91,6 @@ export default function Dashboard() {
     let isActive = true;
     let interval: NodeJS.Timeout | undefined = undefined;
 
-    // Fetch metrics
     const fetchData = async () => {
       if (!isActive) return;
 
@@ -112,7 +123,6 @@ export default function Dashboard() {
         const predictionData = await predictionRes.json();
         setPrediction(predictionData);
 
-        // Update chart data (mock for now - would track actual vs predicted)
         setChartData((prev) => {
           const newData = [
             ...prev,
@@ -127,7 +137,7 @@ export default function Dashboard() {
                 )?.latency_ms || 0,
             },
           ].slice(-20);
-          // compute simple metrics from newData
+
           if (newData.length >= 2) {
             const errors = newData.map((d) =>
               Math.abs((d.predicted || 0) - (d.actual || 0))
@@ -154,7 +164,6 @@ export default function Dashboard() {
           return newData;
         });
 
-        // update per-node logs
         if (predictionData && Array.isArray(predictionData.all_predictions)) {
           const timeStr = new Date().toLocaleTimeString();
           setNodeLogs((prev) => {
@@ -202,6 +211,14 @@ export default function Dashboard() {
       }
     };
   }, [range, autoPoll, pollMs]);
+
+  if (!ready || !authenticated) {
+    return (
+      <div className="min-h-screen bg-black text-white flex items-center justify-center">
+        <Activity className="w-8 h-8 text-violet-500 animate-pulse" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-black text-white antialiased">
@@ -310,6 +327,14 @@ export default function Dashboard() {
                 >
                   Playground
                 </Link>
+                <button
+                  onClick={logout}
+                  className="px-2.5 py-1 rounded-md bg-red-500/10 border border-red-500/30 hover:bg-red-500/20 inline-flex items-center gap-1"
+                  title="Sign Out"
+                >
+                  <LogOut className="w-3 h-3" />
+                  Logout
+                </button>
               </nav>
             </div>
           </div>
@@ -394,7 +419,7 @@ export default function Dashboard() {
 
             <div className="space-y-3">
               {metrics
-                .filter((node) => node.node_name !== 'agave_self_hosted') 
+                .filter((node) => node.node_name !== 'agave_self_hosted')
                 .map((node) => {
                   const pred = prediction?.all_predictions.find(
                     (p) => p.node_id === node.node_name
