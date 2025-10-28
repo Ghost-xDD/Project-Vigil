@@ -1,0 +1,14 @@
+# Railway Configuration for Vigil Intelligent Router
+# Docs: https://docs.railway.com/guides/config-as-code
+
+[build]
+builder = "dockerfile"
+dockerfilePath = "Dockerfile"
+
+[deploy]
+startCommand = "./vigil-router"
+healthcheckPath = "/health"
+healthcheckTimeout = 300
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 3
+

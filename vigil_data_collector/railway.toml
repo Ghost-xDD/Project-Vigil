@@ -1,0 +1,14 @@
+# Railway Configuration for Vigil Data Collector
+# Docs: https://docs.railway.com/guides/config-as-code
+
+[build]
+builder = "dockerfile"
+dockerfilePath = "Dockerfile"
+
+[deploy]
+startCommand = "python3 main.py"
+healthcheckPath = "/health"
+healthcheckTimeout = 300
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 3
+
