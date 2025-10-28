@@ -432,7 +432,7 @@ export default function Chaos() {
                   href="/dashboard"
                   className="px-2.5 py-1 rounded-md bg-white/5 border border-white/10 hover:bg-white/10"
                 >
-                  Dashboard
+                  Dashboard 
                 </Link>
                 <Link
                   href="/chaos"
