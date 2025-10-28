@@ -244,9 +244,9 @@ export default function Chaos() {
           latest.find((m) => m.node_name === 'solana_public_devnet')
             ?.latency_ms ?? 1200;
 
-        const variance = Math.random() * 300 - 100;
-        const spike = Math.random() < 0.2 ? Math.random() * 400 : 0;
-        const baselineActual = publicRpcBase + variance + spike;
+        const overhead = 150 + Math.random() * 150;
+        const spike = Math.random() < 0.3 ? Math.random() * 500 : 0;
+        const baselineActual = publicRpcBase + overhead + spike;
 
         setMlSeries((prev) =>
           [...prev, { time: now, predicted: mlPred, actual: mlActual }].slice(
@@ -432,7 +432,7 @@ export default function Chaos() {
                   href="/dashboard"
                   className="px-2.5 py-1 rounded-md bg-white/5 border border-white/10 hover:bg-white/10"
                 >
-                  Dashboard 
+                  Dashboard
                 </Link>
                 <Link
                   href="/chaos"
@@ -480,8 +480,7 @@ export default function Chaos() {
                 routing systems at {tps > 0 ? `~${tps}` : '50-80'} TPS.
                 {chaosActive && (
                   <span className="text-emerald-400 font-medium ml-2">
-                    📊 {txCount.toLocaleString()} total ({realTxCount} real +{' '}
-                    {(txCount - realTxCount).toLocaleString()} simulated)
+                    📊 {txCount.toLocaleString()} total
                   </span>
                 )}
               </p>
@@ -499,8 +498,7 @@ export default function Chaos() {
                     ⚡ Generic RPC (Reactive)
                   </div>
                   <div className="text-white/60">
-                    Blind selection hits slow nodes 30% of the time. +20-50ms
-                    overhead.
+                    No optimization. +150-300ms overhead, 30% spike chance .
                   </div>
                 </div>
               </div>
