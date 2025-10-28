@@ -51,6 +51,9 @@ logs/
 STATUS.md
 training_output.log
 
+# Deployment guides (keep local only)
+RAILWAY_DEPLOYMENT_GUIDE.md
+
 # OS
 .DS_Store
 Thumbs.db
@@ -69,14 +72,15 @@ vigil-router
 *.test
 *.out
 
-# ML Models and Data (if large)
-vigil-ml-layer/models/*.joblib
-vigil-ml-layer/models/*.keras
+# ML Models - ALLOW trained models for deployment
+!vigil-ml-layer/models/*.joblib
+!vigil-ml-layer/artifacts/*.joblib
+
+# But ignore large training data
 vigil-ml-layer/data/raw/*.csv
 vigil-ml-layer/data/processed/*.csv
-vigil-ml-layer/artifacts/*.joblib
 
-# Keep directories but not contents
+# Keep directories
 !vigil-ml-layer/models/.gitkeep
 !vigil-ml-layer/artifacts/.gitkeep
 !vigil-ml-layer/data/raw/.gitkeep
