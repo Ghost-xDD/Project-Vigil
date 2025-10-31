@@ -143,18 +143,27 @@ class SentryPredictor:
     def generate_explanation(self, recommended_node: str, rec_pred: Dict, all_preds: List[Dict]) -> str:
         """
         Generates a human-readable explanation for the recommendation.
+        Note: Router applies auto-calibration and hybrid scoring on top of these predictions.
         """
         rec_fail = rec_pred['failure_prob']
-        rec_lat = rec_pred['predicted_latency_ms'] - 50  # Adjust for routing optimization
+        rec_lat = rec_pred['predicted_latency_ms']
+        rec_anomaly = rec_pred.get('anomaly_detected', False)
         
-        explanation = f"Recommending {recommended_node} due to low failure probability ({rec_fail:.3f}) and optimal latency ({rec_lat:.1f}ms)."
+        # Build explanation
+        explanation = f"Selected {recommended_node} with {rec_lat:.0f}ms predicted latency and {rec_fail:.2%} failure risk."
         
-        # Find the next best
+        # Add anomaly warning if detected
+        if rec_anomaly:
+            explanation += " ⚠️ Anomaly detected on this node."
+        
+        # Compare to alternatives
         others = sorted([p for p in all_preds if p['node_id'] != recommended_node], key=lambda x: x['cost_score'])
         if others:
             other = others[0]
-            other_lat = other['predicted_latency_ms'] - 50
-            explanation += f" Next best: {other['node_id']} ({other_lat:.1f}ms)."
+            diff = other['predicted_latency_ms'] - rec_lat
+            explanation += f" {diff:.0f}ms faster than next best ({other['node_id']})."
+        
+        explanation += " Note: Router applies auto-calibration (learns environment offset) and hybrid scoring (70% prediction + 30% recent actual) for final routing decision."
             
         return explanation
 
