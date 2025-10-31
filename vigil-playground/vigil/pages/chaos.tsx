@@ -520,31 +520,66 @@ export default function Chaos() {
             )}
           </div>
           <div className="px-6 py-4 rounded-xl bg-white/5 border border-white/10">
-            <div className="text-sm text-white/60 mb-1">Standard Pick</div>
-            <div className="text-xl font-bold text-white/70">Generic RPC</div>
-            <div className="text-xs text-white/40 mt-0.5">No intelligence</div>
-          </div>
-          <div className="px-6 py-4 rounded-xl bg-white/5 border border-white/10">
-            <div className="text-sm text-white/60 mb-1">Failure Risk</div>
-            <div className="text-2xl font-bold text-amber-400">
-              {prediction
+            <div className="text-sm text-white/60 mb-1">Vigil Avg</div>
+            <div className="text-2xl font-bold text-emerald-400">
+              {mlSeries.length > 0
                 ? `${(
-                    prediction.recommendation_details.failure_prob * 100
-                  ).toFixed(1)}%`
+                    mlSeries.slice(-10).reduce((sum, d) => sum + d.actual, 0) /
+                    Math.min(10, mlSeries.length)
+                  ).toFixed(0)}ms`
                 : '—'}
             </div>
+            <div className="text-xs text-violet-300 mt-0.5">Optimized</div>
+          </div>
+          <div className="px-6 py-4 rounded-xl bg-white/5 border border-white/10">
+            <div className="text-sm text-white/60 mb-1">Generic Avg</div>
+            <div className="text-2xl font-bold text-red-400">
+              {baselineSeries.length > 0
+                ? `${(
+                    baselineSeries
+                      .slice(-10)
+                      .reduce((sum, d) => sum + d.actual, 0) /
+                    Math.min(10, baselineSeries.length)
+                  ).toFixed(0)}ms`
+                : '—'}
+            </div>
+            <div className="text-xs text-white/40 mt-0.5">Unoptimized</div>
+          </div>
+          <div className="px-6 py-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30">
+            <div className="text-sm text-emerald-300/80 mb-1">
+              Performance Gain
+            </div>
+            <div className="text-2xl font-bold text-emerald-400">
+              {mlSeries.length > 0 && baselineSeries.length > 0
+                ? (() => {
+                    const vigilAvg =
+                      mlSeries
+                        .slice(-10)
+                        .reduce((sum, d) => sum + d.actual, 0) /
+                      Math.min(10, mlSeries.length);
+                    const genericAvg =
+                      baselineSeries
+                        .slice(-10)
+                        .reduce((sum, d) => sum + d.actual, 0) /
+                      Math.min(10, baselineSeries.length);
+                    const improvement =
+                      ((genericAvg - vigilAvg) / genericAvg) * 100;
+                    return `${improvement.toFixed(0)}%`;
+                  })()
+                : '—'}
+            </div>
+            <div className="text-xs text-emerald-300/70 mt-0.5">Faster</div>
           </div>
           <div className="px-6 py-4 rounded-xl bg-white/5 border border-white/10">
             <div className="text-sm text-white/60 mb-1">Workload TPS</div>
-            <div className="text-2xl font-bold text-emerald-400">
+            <div className="text-2xl font-bold text-white/80">
               {chaosActive ? tps : '—'}
             </div>
-          </div>
-          <div className="px-6 py-4 rounded-xl bg-white/5 border border-white/10 flex items-center justify-between">
-            <div className="text-sm text-white/60">Live Polling</div>
-            <RefreshCcw
-              className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`}
-            />
+            <div className="text-xs text-white/40 mt-0.5">
+              <RefreshCcw
+                className={`w-3 h-3 inline ${loading ? 'animate-spin' : ''}`}
+              />
+            </div>
           </div>
         </div>
 

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
@@ -65,6 +66,22 @@ func main() {
 	if cfg.HealthCheckEnabled {
 		mux.HandleFunc("/health", proxy.HealthCheckHandler(logger))
 	}
+	
+	// Calibration stats endpoint
+	mux.HandleFunc("/calibration", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		w.Header().Set("Content-Type", "application/json")
+		
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		
+		stats := mlClient.GetCalibrationStats()
+		json.NewEncoder(w).Encode(stats)
+	})
 	
 	// Root endpoint - handle both RPC requests and info
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {

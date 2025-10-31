@@ -7,10 +7,19 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"sync"
 	"time"
 
 	"go.uber.org/zap"
 )
+
+// CalibrationRecord tracks a single prediction vs actual measurement
+type CalibrationRecord struct {
+	NodeID           string
+	PredictedLatency float64
+	ActualLatency    float64
+	Timestamp        time.Time
+}
 
 // Client handles communication with the ML prediction service
 type Client struct {
@@ -19,6 +28,11 @@ type Client struct {
 	metricsURL       string
 	nodeURLMap       map[string]string
 	logger           *zap.Logger
+	
+	// Auto-calibration
+	calibrationMutex sync.RWMutex
+	calibrationData  []CalibrationRecord
+	calibrationLimit int
 }
 
 // NewClient creates a new ML client
@@ -32,10 +46,12 @@ func NewClient(predictURL, metricsURL string, timeout time.Duration, nodeURLMap 
 				IdleConnTimeout:     90 * time.Second,
 			},
 		},
-		predictURL: predictURL,
-		metricsURL: metricsURL,
-		nodeURLMap: nodeURLMap,
-		logger:     logger,
+		predictURL:       predictURL,
+		metricsURL:       metricsURL,
+		nodeURLMap:       nodeURLMap,
+		logger:           logger,
+		calibrationData:  make([]CalibrationRecord, 0, 100),
+		calibrationLimit: 100,
 	}
 }
 
@@ -101,6 +117,9 @@ func (c *Client) GetRecommendation(ctx context.Context) (*PredictionResponse, er
 
 	// Step 3: Apply hybrid scoring (combine ML prediction with recent actual latency)
 	prediction = c.applyHybridScoring(prediction, recentAvgs)
+
+	// Step 4: Apply auto-calibration to correct for environment-specific offsets
+	prediction = c.applyCalibration(prediction)
 
 	c.logger.Info("Hybrid recommendation selected",
 		zap.String("recommended_node", prediction.RecommendedNode),
@@ -208,6 +227,165 @@ func (c *Client) applyHybridScoring(prediction *PredictionResponse, recentAvgs m
 	return prediction
 }
 
+// applyCalibration adjusts predictions based on learned offset between predictions and actuals
+func (c *Client) applyCalibration(prediction *PredictionResponse) *PredictionResponse {
+	c.calibrationMutex.RLock()
+	defer c.calibrationMutex.RUnlock()
+	
+	if len(c.calibrationData) < 5 {
+		// Not enough data for calibration yet
+		c.logger.Debug("Insufficient calibration data",
+			zap.Int("records", len(c.calibrationData)))
+		return prediction
+	}
+	
+	// Calculate per-node offsets (predicted - actual)
+	nodeOffsets := make(map[string][]float64)
+	for _, record := range c.calibrationData {
+		offset := record.PredictedLatency - record.ActualLatency
+		nodeOffsets[record.NodeID] = append(nodeOffsets[record.NodeID], offset)
+	}
+	
+	// Calculate average offset per node
+	nodeAvgOffsets := make(map[string]float64)
+	for nodeID, offsets := range nodeOffsets {
+		if len(offsets) == 0 {
+			continue
+		}
+		sum := 0.0
+		for _, offset := range offsets {
+			sum += offset
+		}
+		nodeAvgOffsets[nodeID] = sum / float64(len(offsets))
+	}
+	
+	// Calculate global offset as fallback
+	globalOffset := 0.0
+	totalRecords := 0
+	for _, offsets := range nodeOffsets {
+		for _, offset := range offsets {
+			globalOffset += offset
+			totalRecords++
+		}
+	}
+	if totalRecords > 0 {
+		globalOffset /= float64(totalRecords)
+	}
+	
+	c.logger.Info("Calibration offsets calculated",
+		zap.Float64("global_offset", globalOffset),
+		zap.Int("total_records", len(c.calibrationData)))
+	
+	// Apply calibration to all predictions
+	for i := range prediction.AllPredictions {
+		node := &prediction.AllPredictions[i]
+		
+		// Use node-specific offset if available, otherwise global offset
+		offset, hasNodeOffset := nodeAvgOffsets[node.NodeID]
+		if !hasNodeOffset {
+			offset = globalOffset
+		}
+		
+		// Apply calibration
+		originalLatency := node.PredictedLatencyMS
+		node.PredictedLatencyMS = originalLatency - offset
+		
+		// Ensure non-negative
+		if node.PredictedLatencyMS < 0 {
+			node.PredictedLatencyMS = 0
+		}
+		
+		c.logger.Debug("Applied calibration",
+			zap.String("node", node.NodeID),
+			zap.Float64("original", originalLatency),
+			zap.Float64("offset", offset),
+			zap.Float64("calibrated", node.PredictedLatencyMS))
+	}
+	
+	// Update recommendation details
+	for _, node := range prediction.AllPredictions {
+		if node.NodeID == prediction.RecommendedNode {
+			prediction.RecommendationDetails = node
+			break
+		}
+	}
+	
+	return prediction
+}
+
+// RecordActual records actual latency for calibration learning
+func (c *Client) RecordActual(nodeID string, predictedLatency, actualLatency float64) {
+	c.calibrationMutex.Lock()
+	defer c.calibrationMutex.Unlock()
+	
+	record := CalibrationRecord{
+		NodeID:           nodeID,
+		PredictedLatency: predictedLatency,
+		ActualLatency:    actualLatency,
+		Timestamp:        time.Now(),
+	}
+	
+	c.calibrationData = append(c.calibrationData, record)
+	
+	// Keep only recent records
+	if len(c.calibrationData) > c.calibrationLimit {
+		c.calibrationData = c.calibrationData[len(c.calibrationData)-c.calibrationLimit:]
+	}
+	
+	c.logger.Debug("Recorded calibration data",
+		zap.String("node", nodeID),
+		zap.Float64("predicted", predictedLatency),
+		zap.Float64("actual", actualLatency),
+		zap.Float64("offset", predictedLatency-actualLatency),
+		zap.Int("total_records", len(c.calibrationData)))
+}
+
+// GetCalibrationStats returns current calibration statistics
+func (c *Client) GetCalibrationStats() map[string]interface{} {
+	c.calibrationMutex.RLock()
+	defer c.calibrationMutex.RUnlock()
+	
+	if len(c.calibrationData) == 0 {
+		return map[string]interface{}{
+			"records": 0,
+			"status":  "no_data",
+		}
+	}
+	
+	// Calculate per-node offsets
+	nodeOffsets := make(map[string][]float64)
+	for _, record := range c.calibrationData {
+		offset := record.PredictedLatency - record.ActualLatency
+		nodeOffsets[record.NodeID] = append(nodeOffsets[record.NodeID], offset)
+	}
+	
+	// Calculate average offset per node
+	nodeAvgOffsets := make(map[string]float64)
+	for nodeID, offsets := range nodeOffsets {
+		if len(offsets) == 0 {
+			continue
+		}
+		sum := 0.0
+		for _, offset := range offsets {
+			sum += offset
+		}
+		nodeAvgOffsets[nodeID] = sum / float64(len(offsets))
+	}
+	
+	// Global offset
+	globalOffset := 0.0
+	for _, record := range c.calibrationData {
+		globalOffset += record.PredictedLatency - record.ActualLatency
+	}
+	globalOffset /= float64(len(c.calibrationData))
+	
+	return map[string]interface{}{
+		"records":       len(c.calibrationData),
+		"global_offset": globalOffset,
+		"node_offsets":  nodeAvgOffsets,
+		"status":        "active",
+	}
+}
 
 func (c *Client) fallbackToMetricsOnly(metrics []MetricData, recentAvgs map[string]float64) (*PredictionResponse, error) {
 	if len(recentAvgs) == 0 {

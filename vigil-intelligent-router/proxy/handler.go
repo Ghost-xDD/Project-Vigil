@@ -127,8 +127,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		zap.Float64("predicted_latency", prediction.RecommendationDetails.PredictedLatencyMS),
 		zap.Float64("cost_score", prediction.RecommendationDetails.CostScore))
 
-	// Forward the request
-	h.forwardRequest(w, r, targetURL, bodyBytes, startTime)
+	// Forward the request with prediction details for calibration
+	h.forwardRequestWithCalibration(w, r, targetURL, bodyBytes, startTime, prediction)
 }
 
 // forwardRequest forwards the RPC request to the target node and streams the response
@@ -192,6 +192,89 @@ func (h *Handler) forwardRequest(w http.ResponseWriter, originalReq *http.Reques
 		zap.Int("status", resp.StatusCode),
 		zap.Int64("response_size", written),
 		zap.Duration("total_duration", duration))
+}
+
+// forwardRequestWithCalibration forwards the request and records actual latency for calibration
+func (h *Handler) forwardRequestWithCalibration(w http.ResponseWriter, originalReq *http.Request, targetURL string, bodyBytes []byte, startTime time.Time, prediction *ml.PredictionResponse) {
+	// Measure the actual latency to the RPC node
+	rpcStartTime := time.Now()
+	
+	// Create new request to target RPC
+	req, err := http.NewRequest(http.MethodPost, targetURL, bytes.NewReader(bodyBytes))
+	if err != nil {
+		h.logger.Error("Failed to create forwarding request", zap.Error(err))
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	// Copy essential headers
+	req.Header.Set("Content-Type", "application/json")
+	if userAgent := originalReq.Header.Get("User-Agent"); userAgent != "" {
+		req.Header.Set("User-Agent", userAgent)
+	}
+
+	// Execute the request
+	resp, err := h.httpClient.Do(req)
+	if err != nil {
+		h.logger.Error("Request to target RPC failed",
+			zap.String("target", targetURL),
+			zap.Error(err))
+		http.Error(w, "Failed to reach RPC node", http.StatusBadGateway)
+		return
+	}
+	defer resp.Body.Close()
+	
+	// Calculate actual RPC latency (time to first byte)
+	actualLatencyMS := float64(time.Since(rpcStartTime).Milliseconds())
+	
+	// Record actual latency for calibration
+	h.mlClient.RecordActual(
+		prediction.RecommendedNode,
+		prediction.RecommendationDetails.PredictedLatencyMS,
+		actualLatencyMS,
+	)
+	
+	h.logger.Info("Calibration recorded",
+		zap.String("node", prediction.RecommendedNode),
+		zap.Float64("predicted_ms", prediction.RecommendationDetails.PredictedLatencyMS),
+		zap.Float64("actual_ms", actualLatencyMS),
+		zap.Float64("error", prediction.RecommendationDetails.PredictedLatencyMS-actualLatencyMS))
+
+	// Copy response headers, but skip CORS headers (we set our own)
+	for key, values := range resp.Header {
+		// Skip CORS headers from backend to avoid duplicates
+		if key == "Access-Control-Allow-Origin" ||
+			key == "Access-Control-Allow-Methods" ||
+			key == "Access-Control-Allow-Headers" ||
+			key == "Access-Control-Allow-Credentials" ||
+			key == "Access-Control-Max-Age" ||
+			key == "Access-Control-Expose-Headers" {
+			continue
+		}
+		for _, value := range values {
+			w.Header().Add(key, value)
+		}
+	}
+
+	// Set status code
+	w.WriteHeader(resp.StatusCode)
+
+	// Stream response body back to client
+	written, err := io.Copy(w, resp.Body)
+	if err != nil {
+		h.logger.Error("Failed to stream response",
+			zap.Error(err),
+			zap.Int64("bytes_written", written))
+		return
+	}
+
+	duration := time.Since(startTime)
+	h.logger.Info("Request completed",
+		zap.String("target", targetURL),
+		zap.Int("status", resp.StatusCode),
+		zap.Int64("response_size", written),
+		zap.Duration("total_duration", duration),
+		zap.Float64("rpc_latency_ms", actualLatencyMS))
 }
 
 // HealthCheckHandler returns a simple health check handler

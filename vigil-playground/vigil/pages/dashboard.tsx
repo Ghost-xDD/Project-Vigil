@@ -378,11 +378,13 @@ export default function Dashboard() {
                       <div>
                         <div className="text-white/60">Predicted Latency</div>
                         <div className="text-xl font-semibold text-emerald-400">
-                          {(
-                            prediction.recommendation_details
-                              .predicted_latency_ms - 50
-                          ).toFixed(1)}
+                          {prediction.recommendation_details.predicted_latency_ms.toFixed(
+                            1
+                          )}
                           ms
+                        </div>
+                        <div className="text-xs text-emerald-300/60 mt-0.5">
+                          Auto-calibrated
                         </div>
                       </div>
                       <div>
@@ -552,12 +554,29 @@ export default function Dashboard() {
             </ResponsiveContainer>
 
             <div className="mt-4 p-4 rounded-lg bg-white/5 text-sm">
-              <div className="flex justify-between text-white/60">
-                <span>MAE: {statsLine.mae.toFixed(0)}ms</span>
-                <span>MAPE: {statsLine.mape.toFixed(1)}%</span>
-                <span className="text-emerald-400">
-                  Within 100ms: {statsLine.acc.toFixed(0)}%
-                </span>
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <div className="text-white/60 text-xs mb-1">
+                    Mean Abs Error
+                  </div>
+                  <div className="text-lg font-semibold text-white/80">
+                    {statsLine.mae.toFixed(0)}ms
+                  </div>
+                </div>
+                <div>
+                  <div className="text-white/60 text-xs mb-1">Mean % Error</div>
+                  <div className="text-lg font-semibold text-white/80">
+                    {statsLine.mape.toFixed(1)}%
+                  </div>
+                </div>
+                <div>
+                  <div className="text-emerald-400 text-xs mb-1">
+                    Accuracy (±100ms)
+                  </div>
+                  <div className="text-lg font-semibold text-emerald-400">
+                    {statsLine.acc.toFixed(0)}%
+                  </div>
+                </div>
               </div>
             </div>
           </div>
