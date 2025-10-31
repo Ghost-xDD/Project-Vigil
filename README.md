@@ -6,6 +6,26 @@ Vigil is the predictive "nervous system" for Solana's multi-client network, prov
 
 ---
 
+## 📋 Table of Contents
+
+- [🎯 The Vision](#-the-vision)
+- [❗ The Problem](#-the-problem-driving-blind)
+- [💡 The Solution](#-the-solution-a-predictive-intelligence-layer)
+- [🏗️ Architecture](#️-architecture)
+- [📦 Components](#-components)
+- [🚀 Quick Start](#-quick-start)
+- [📡 API Endpoints](#-api-endpoints)
+- [🔧 Configuration](#-configuration)
+- [🔐 Security](#-security)
+- [🧪 Testing](#-testing)
+- [🐛 Troubleshooting](#-troubleshooting)
+- [🎯 Use Cases](#-use-cases)
+- [🚀 Deployment](#-deployment)
+- [🤝 Contributing](#-contributing)
+- [📄 License](#-license)
+
+---
+
 ## 🎯 The Vision
 
 Solana's 2025 roadmap is centered on achieving institutional-grade resilience through client diversity. The parallel operation of the battle-tested **Agave** (Rust) client and the hyper-performant **Firedancer** (C++) client is the most critical evolution of the network.
