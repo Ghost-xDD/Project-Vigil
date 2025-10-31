@@ -83,6 +83,36 @@ func main() {
 		json.NewEncoder(w).Encode(stats)
 	})
 	
+	
+	mux.HandleFunc("/predict", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		w.Header().Set("Content-Type", "application/json")
+		
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		
+		if r.Method != http.MethodGet && r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		
+		ctx, cancel := context.WithTimeout(context.Background(), cfg.MLQueryTimeout)
+		defer cancel()
+		
+		prediction, err := mlClient.GetRecommendation(ctx)
+		if err != nil {
+			logger.Error("Failed to get prediction", zap.Error(err))
+			http.Error(w, "Failed to get prediction", http.StatusInternalServerError)
+			return
+		}
+		
+		json.NewEncoder(w).Encode(prediction)
+	})
+	
 	// Root endpoint - handle both RPC requests and info
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/" {

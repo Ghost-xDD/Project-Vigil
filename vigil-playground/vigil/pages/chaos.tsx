@@ -142,8 +142,8 @@ export default function Chaos() {
 
     const dataCollectorUrl =
       process.env.NEXT_PUBLIC_DATA_COLLECTOR_URL || 'http://localhost:8000';
-    const mlServiceUrl =
-      process.env.NEXT_PUBLIC_ML_SERVICE_URL || 'http://localhost:8001';
+    const routerUrl =
+      process.env.NEXT_PUBLIC_ROUTER_URL || 'http://localhost:8080';
 
     const limit = range === '5m' ? 20 : range === '15m' ? 60 : 180;
     const pollMs = 1000;
@@ -217,17 +217,10 @@ export default function Chaos() {
         const latest: NodeMetric[] = await metricsRes.json();
         setMetrics(latest);
 
-        // History for ML input
-        const historyRes = await fetch(
-          `${dataCollectorUrl}/api/v1/metrics/history?limit=${limit}`
-        );
-        const history = await historyRes.json();
-
-        // ML Prediction
-        const predictionRes = await fetch(`${mlServiceUrl}/predict`, {
-          method: 'POST',
+        // Get calibrated prediction from router
+        const predictionRes = await fetch(`${routerUrl}/predict`, {
+          method: 'GET',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ metrics: history }),
         });
         const pred: RoutingRecommendation = await predictionRes.json();
         setPrediction(pred);

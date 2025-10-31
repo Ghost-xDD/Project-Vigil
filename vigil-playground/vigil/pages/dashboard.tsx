@@ -99,8 +99,8 @@ export default function Dashboard() {
       try {
         const dataCollectorUrl =
           process.env.NEXT_PUBLIC_DATA_COLLECTOR_URL || 'http://localhost:8000';
-        const mlServiceUrl =
-          process.env.NEXT_PUBLIC_ML_SERVICE_URL || 'http://localhost:8001';
+        const routerUrl =
+          process.env.NEXT_PUBLIC_ROUTER_URL || 'http://localhost:8080';
 
         const metricsRes = await fetch(
           `${dataCollectorUrl}/api/v1/metrics/latest-metrics`
@@ -108,17 +108,10 @@ export default function Dashboard() {
         const metricsData = await metricsRes.json();
         setMetrics(metricsData);
 
-        // Get ML prediction (less frequent to save resources)
-        const limit = range === '5m' ? 20 : range === '15m' ? 40 : 60;
-        const historyRes = await fetch(
-          `${dataCollectorUrl}/api/v1/metrics/history?limit=${limit}`
-        );
-        const historyData = await historyRes.json();
-
-        const predictionRes = await fetch(`${mlServiceUrl}/predict`, {
-          method: 'POST',
+        // Get calibrated prediction from router (includes auto-calibration)
+        const predictionRes = await fetch(`${routerUrl}/predict`, {
+          method: 'GET',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ metrics: historyData }),
         });
         const predictionData = await predictionRes.json();
         setPrediction(predictionData);
