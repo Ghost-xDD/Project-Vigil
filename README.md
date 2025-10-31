@@ -4,6 +4,8 @@
 
 Vigil is the predictive "nervous system" for Solana's multi-client network, providing real-time failure probability scores that enable infrastructure to be proactive, not reactive.
 
+[Litepaper](https://drive.google.com/file/d/1Iy1ZG7DRy9WbWRFN2B7BD7_0YBDrpY86/view?usp=sharing)
+
 ---
 
 ## 📋 Table of Contents
