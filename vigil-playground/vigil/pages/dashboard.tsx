@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { usePrivy } from '@privy-io/react-auth';
 import { useRouter } from 'next/router';
 import {
@@ -83,127 +83,128 @@ export default function Dashboard() {
     }
   }, [ready, authenticated, router]);
 
+  const fetchData = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const dataCollectorUrl =
+        process.env.NEXT_PUBLIC_DATA_COLLECTOR_URL || 'http://localhost:8000';
+      const routerUrl =
+        process.env.NEXT_PUBLIC_ROUTER_URL || 'http://localhost:8080';
+
+      const metricsRes = await fetch(
+        `${dataCollectorUrl}/api/v1/metrics/latest-metrics`
+      );
+      const metricsData = await metricsRes.json();
+      setMetrics(metricsData);
+
+      // Get calibrated prediction from router (includes auto-calibration)
+      const predictionRes = await fetch(`${routerUrl}/predict`, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      const predictionData = await predictionRes.json();
+      setPrediction(predictionData);
+
+      setChartData((prev) => {
+        const newData = [
+          ...prev,
+          {
+            time: new Date().toLocaleTimeString(),
+            predicted:
+              predictionData.recommendation_details.predicted_latency_ms - 50,
+            actual:
+              metricsData.find(
+                (m: NodeMetric) =>
+                  m.node_name === predictionData.recommended_node
+              )?.latency_ms || 0,
+          },
+        ].slice(-20);
+
+        if (newData.length >= 2) {
+          const errors = newData.map((d) =>
+            Math.abs((d.predicted || 0) - (d.actual || 0))
+          );
+          const mae = errors.reduce((a, b) => a + b, 0) / errors.length;
+          const mape =
+            (newData
+              .map((d) =>
+                d.actual
+                  ? Math.abs(((d.predicted || 0) - (d.actual || 0)) / d.actual)
+                  : 0
+              )
+              .reduce((a, b) => a + b, 0) /
+              errors.length) *
+            100;
+          const withinThreshold = newData.filter(
+            (d) => Math.abs((d.predicted || 0) - (d.actual || 0)) <= 100
+          ).length;
+          const acc = (withinThreshold / newData.length) * 100;
+          setStatsLine({ mae, mape: isFinite(mape) ? mape : 0, acc });
+        }
+        return newData;
+      });
+
+      if (predictionData && Array.isArray(predictionData.all_predictions)) {
+        const timeStr = new Date().toLocaleTimeString();
+        setNodeLogs((prev) => {
+          const updated: Record<string, NodeLog[]> = { ...prev };
+          predictionData.all_predictions.forEach((p: NodePrediction) => {
+            const nodeId = p.node_id;
+            const latest = metricsData.find(
+              (m: NodeMetric) => m.node_name === nodeId
+            );
+            const latency = latest?.latency_ms ?? 0;
+            const success = (latest?.is_healthy ?? 0) === 1;
+            const chosen = predictionData.recommended_node === nodeId;
+            const entry: NodeLog = {
+              time: timeStr,
+              chosen,
+              latency,
+              success,
+            };
+            const arr = updated[nodeId]
+              ? [entry, ...updated[nodeId]].slice(0, 5)
+              : [entry];
+            updated[nodeId] = arr;
+          });
+          return updated;
+        });
+      }
+
+      setStats((prev) => ({ ...prev, total: prev.total + 1 }));
+      setLastUpdated(new Date().toLocaleTimeString());
+    } catch (error) {
+      console.error('Error fetching data:', error);
+      setError('Failed to fetch data. Check services.');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
-    if (!autoPoll) {
+    if (ready && authenticated) {
+      fetchData();
+    }
+  }, [ready, authenticated, fetchData]);
+
+  useEffect(() => {
+    if (!autoPoll || !ready || !authenticated) {
       return;
     }
 
     let isActive = true;
-    let interval: NodeJS.Timeout | undefined = undefined;
-
-    const fetchData = async () => {
-      if (!isActive) return;
-
-      setLoading(true);
-      setError(null);
-      try {
-        const dataCollectorUrl =
-          process.env.NEXT_PUBLIC_DATA_COLLECTOR_URL || 'http://localhost:8000';
-        const routerUrl =
-          process.env.NEXT_PUBLIC_ROUTER_URL || 'http://localhost:8080';
-
-        const metricsRes = await fetch(
-          `${dataCollectorUrl}/api/v1/metrics/latest-metrics`
-        );
-        const metricsData = await metricsRes.json();
-        setMetrics(metricsData);
-
-        // Get calibrated prediction from router (includes auto-calibration)
-        const predictionRes = await fetch(`${routerUrl}/predict`, {
-          method: 'GET',
-          headers: { 'Content-Type': 'application/json' },
-        });
-        const predictionData = await predictionRes.json();
-        setPrediction(predictionData);
-
-        setChartData((prev) => {
-          const newData = [
-            ...prev,
-            {
-              time: new Date().toLocaleTimeString(),
-              predicted:
-                predictionData.recommendation_details.predicted_latency_ms - 50,
-              actual:
-                metricsData.find(
-                  (m: NodeMetric) =>
-                    m.node_name === predictionData.recommended_node
-                )?.latency_ms || 0,
-            },
-          ].slice(-20);
-
-          if (newData.length >= 2) {
-            const errors = newData.map((d) =>
-              Math.abs((d.predicted || 0) - (d.actual || 0))
-            );
-            const mae = errors.reduce((a, b) => a + b, 0) / errors.length;
-            const mape =
-              (newData
-                .map((d) =>
-                  d.actual
-                    ? Math.abs(
-                        ((d.predicted || 0) - (d.actual || 0)) / d.actual
-                      )
-                    : 0
-                )
-                .reduce((a, b) => a + b, 0) /
-                errors.length) *
-              100;
-            const withinThreshold = newData.filter(
-              (d) => Math.abs((d.predicted || 0) - (d.actual || 0)) <= 100
-            ).length;
-            const acc = (withinThreshold / newData.length) * 100;
-            setStatsLine({ mae, mape: isFinite(mape) ? mape : 0, acc });
-          }
-          return newData;
-        });
-
-        if (predictionData && Array.isArray(predictionData.all_predictions)) {
-          const timeStr = new Date().toLocaleTimeString();
-          setNodeLogs((prev) => {
-            const updated: Record<string, NodeLog[]> = { ...prev };
-            predictionData.all_predictions.forEach((p: NodePrediction) => {
-              const nodeId = p.node_id;
-              const latest = metricsData.find(
-                (m: NodeMetric) => m.node_name === nodeId
-              );
-              const latency = latest?.latency_ms ?? 0;
-              const success = (latest?.is_healthy ?? 0) === 1;
-              const chosen = predictionData.recommended_node === nodeId;
-              const entry: NodeLog = {
-                time: timeStr,
-                chosen,
-                latency,
-                success,
-              };
-              const arr = updated[nodeId]
-                ? [entry, ...updated[nodeId]].slice(0, 5)
-                : [entry];
-              updated[nodeId] = arr;
-            });
-            return updated;
-          });
-        }
-
-        setStats((prev) => ({ ...prev, total: prev.total + 1 }));
-        setLastUpdated(new Date().toLocaleTimeString());
-      } catch (error) {
-        console.error('Error fetching data:', error);
-        setError('Failed to fetch data. Check services.');
-      } finally {
-        setLoading(false);
+    const interval = setInterval(() => {
+      if (isActive) {
+        fetchData();
       }
-    };
-
-    fetchData();
-    interval = setInterval(fetchData, pollMs);
+    }, pollMs);
 
     return () => {
       isActive = false;
-      if (interval !== undefined) {
-        clearInterval(interval);
-      }
+      clearInterval(interval);
     };
-  }, [range, autoPoll, pollMs]);
+  }, [autoPoll, pollMs, ready, authenticated, fetchData]);
 
   if (!ready || !authenticated) {
     return (
@@ -289,8 +290,7 @@ export default function Dashboard() {
               </button>
               <button
                 onClick={() => {
-                  // retrigger effect by toggling range to same value
-                  setRange((r) => r);
+                  fetchData();
                 }}
                 className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-md bg-white/5 border border-white/10 hover:bg-white/10"
                 title="Refresh"
