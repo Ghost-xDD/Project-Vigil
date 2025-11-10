@@ -53,6 +53,7 @@ training_output.log
 
 # Deployment guides (keep local only)
 RAILWAY_DEPLOYMENT_GUIDE.md
+RATE_LIMITING.md
 
 # OS
 .DS_Store

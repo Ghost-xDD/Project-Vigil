@@ -2,9 +2,12 @@ import logging
 from datetime import datetime
 from typing import List, Dict
 import pandas as pd
-from fastapi import FastAPI, HTTPException, status
+from fastapi import FastAPI, HTTPException, status, Request
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 
 from api.schemas import (
     MetricsBatch,
@@ -62,6 +65,9 @@ async def lifespan(app: FastAPI):
     logger.info("Shutting down Vigil ML Prediction Service")
 
 
+# Initialize rate limiter
+limiter = Limiter(key_func=get_remote_address)
+
 # Initialize FastAPI app
 app = FastAPI(
     title="Vigil ML Prediction Service",
@@ -69,6 +75,10 @@ app = FastAPI(
     description="Machine Learning prediction service for Solana RPC node routing optimization",
     lifespan=lifespan
 )
+
+# Add rate limit state and exception handler
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # Configure CORS
 app.add_middleware(
@@ -81,7 +91,8 @@ app.add_middleware(
 
 
 @app.get("/", status_code=status.HTTP_200_OK)
-async def root():
+@limiter.limit("60/minute")
+async def root(request: Request):
     """Root endpoint - Service information"""
     return {
         "service": "Vigil ML Prediction Service",
@@ -113,7 +124,8 @@ async def health_check():
 
 
 @app.post("/predict", response_model=RoutingRecommendation, status_code=status.HTTP_200_OK)
-async def predict_routing(batch: MetricsBatch):
+@limiter.limit("60/minute")
+async def predict_routing(request: Request, batch: MetricsBatch):
     """
     Predict optimal node routing based on historical metrics.
     
@@ -242,7 +254,8 @@ async def predict_routing(batch: MetricsBatch):
 
 
 @app.get("/models", status_code=status.HTTP_200_OK)
-async def get_models_info():
+@limiter.limit("30/minute")
+async def get_models_info(request: Request):
     """Get information about loaded models"""
     if predictor is None:
         raise HTTPException(

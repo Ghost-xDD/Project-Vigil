@@ -1,14 +1,18 @@
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, Request
 from typing import List
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 from app.schemas.metric import NodeMetrics
 from app.tasks.rpc_poller import latest_metrics_cache, metrics_history
 
 router = APIRouter()
+limiter = Limiter(key_func=get_remote_address)
 
 
 @router.get("/latest-metrics", response_model=List[NodeMetrics])
-async def get_latest_metrics():
+@limiter.limit("120/minute")
+async def get_latest_metrics(request: Request):
     """
     Get the latest metrics for all monitored nodes.
     
@@ -25,7 +29,9 @@ async def get_latest_metrics():
 
 
 @router.get("/history", response_model=List[NodeMetrics])
+@limiter.limit("120/minute")
 async def get_metrics_history(
+    request: Request,
     limit: int = Query(20, ge=1, le=100, description="Number of historical points per node")
 ):
     """
